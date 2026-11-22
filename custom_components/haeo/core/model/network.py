@@ -25,8 +25,10 @@ from .elements.battery import Battery, BatteryElementConfig
 from .elements.buffer import Buffer, BufferElementConfig
 from .elements.connection import Connection, ConnectionElementConfig, ConnectionOutputName
 from .elements.deferrable_load import DeferrableLoad, DeferrableLoadElementConfig
+from .elements.hvac import Hvac, HvacElementConfig
 from .elements.node import Node, NodeElementConfig
 from .elements.policy_pricing import PolicyPricing, PolicyPricingElementConfig
+from .elements.room import Room, RoomElementConfig
 from .elements.thermal_store import ThermalStore, ThermalStoreElementConfig
 from .infeasibility import InfeasibleError, Relaxation, RowLabel, conflicting_rows, listing, row_labels, solve_relaxed
 from .linear import LinearArray, total
@@ -229,6 +231,12 @@ class Network:
 
         for element in self.elements.values():
             element.update_periods(self.periods)
+
+    @overload
+    def add(self, element_config: HvacElementConfig) -> Hvac: ...
+
+    @overload
+    def add(self, element_config: RoomElementConfig) -> Room: ...
 
     @overload
     def add(self, element_config: ThermalStoreElementConfig) -> ThermalStore: ...

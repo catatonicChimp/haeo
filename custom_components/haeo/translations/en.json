@@ -376,6 +376,31 @@
       },
       "abort": { "reconfigure_successful": "Configuration updated successfully" }
     },
+    "hvac": {
+      "flow_title": "Whole-house HVAC",
+      "entry_type": "Whole-house HVAC",
+      "initiate_flow": { "user": "Whole-house HVAC", "reconfigure": "Whole-house HVAC" },
+      "step": {
+        "user": {
+          "title": "Whole-house HVAC",
+          "description": "Configure one shared electrical input and operating mode for the whole-house aircon.",
+          "data": { "connection": "Connection", "name": "Name" },
+          "sections": {
+            "hvac": {
+              "data": { "max_power": "Maximum electrical power", "mode": "Operating mode (-1 cool, 0 off, 1 heat)" },
+              "name": "Whole-house HVAC"
+            }
+          }
+        }
+      },
+      "error": {
+        "invalid_endpoint": "This element applies its own prices, forecasts, and limits on its own connection, so it cannot be connected to directly. Choose the element it is connected to instead.",
+        "missing_name": "Name is required",
+        "name_exists": "A device with this name already exists",
+        "required": "Choose an entity or enter a value for every required field in this section"
+      },
+      "abort": { "reconfigure_successful": "Configuration updated successfully" }
+    },
     "inverter": {
       "flow_title": "Inverter",
       "entry_type": "Inverter",
@@ -528,6 +553,40 @@
       },
       "abort": { "no_rules": "No policy rules configured", "reconfigure_successful": "Policies updated successfully" }
     },
+    "room": {
+      "flow_title": "Room",
+      "entry_type": "Room",
+      "initiate_flow": { "user": "Room", "reconfigure": "Room" },
+      "step": {
+        "user": {
+          "title": "Room",
+          "description": "Attach a room sensor and comfort bands to a shared HVAC appliance. Rooms are not independently controllable zones.",
+          "data": { "connection": "Shared HVAC appliance", "name": "Name" },
+          "sections": {
+            "room": {
+              "data": {
+                "comfort_price": "Comfort price (currency per K h)",
+                "initial_temperature": "Measured room temperature",
+                "loss_rate": "Heat loss rate (1/h)",
+                "maximum_temperature": "Comfort maximum",
+                "minimum_temperature": "Comfort minimum",
+                "outdoor_temperature": "Outdoor temperature forecast",
+                "response": "HVAC response (K per electrical kWh)"
+              },
+              "name": "Room"
+            }
+          }
+        }
+      },
+      "error": {
+        "invalid_endpoint": "This element applies its own prices, forecasts, and limits on its own connection, so it cannot be connected to directly. Choose the element it is connected to instead.",
+        "invalid_hvac": "Choose a configured whole-house HVAC appliance.",
+        "missing_name": "Name is required",
+        "name_exists": "A device with this name already exists",
+        "required": "Choose an entity or enter a value for every required field in this section"
+      },
+      "abort": { "reconfigure_successful": "Configuration updated successfully" }
+    },
     "solar": {
       "flow_title": "Solar",
       "entry_type": "Solar",
@@ -608,12 +667,14 @@
     "deferrable_load": { "name": "{name}" },
     "ev": { "name": "{name}" },
     "grid": { "name": "{name}" },
+    "hvac": { "name": "{name}" },
     "inverter": { "name": "{name}" },
     "junction": { "name": "{name}" },
     "load": { "name": "{name}" },
     "network": { "name": "Optimizer" },
     "node": { "name": "{name}" },
     "policy": { "name": "Policies" },
+    "room": { "name": "{name}" },
     "solar": { "name": "{name}" },
     "thermal_store": { "name": "{name}" }
   },
@@ -662,6 +723,8 @@
       "grid_max_power_target_source": { "name": "Export limit" },
       "grid_price_source_target": { "name": "Import price" },
       "grid_price_target_source": { "name": "Export price" },
+      "hvac_max_power": { "name": "Maximum electrical power" },
+      "hvac_mode": { "name": "Operating mode (-1 cool, 0 off, 1 heat)" },
       "inverter_efficiency_source_target": { "name": "DC to AC efficiency" },
       "inverter_efficiency_target_source": { "name": "AC to DC efficiency" },
       "inverter_max_power_source_target": { "name": "Max DC to AC power" },
@@ -669,6 +732,13 @@
       "load_consumption_cost": { "name": "Consumption cost" },
       "load_forecast": { "name": "Forecast" },
       "policy_price": { "name": "{rule_name} price" },
+      "room_comfort_price": { "name": "Comfort price (currency per K h)" },
+      "room_initial_temperature": { "name": "Measured room temperature" },
+      "room_loss_rate": { "name": "Heat loss rate (1/h)" },
+      "room_maximum_temperature": { "name": "Comfort maximum" },
+      "room_minimum_temperature": { "name": "Comfort minimum" },
+      "room_outdoor_temperature": { "name": "Outdoor temperature forecast" },
+      "room_response": { "name": "HVAC response (K per electrical kWh)" },
       "solar_forecast": { "name": "Forecast" },
       "thermal_store_capacity_per_degree": { "name": "Effective thermal capacity (kWh/K)" },
       "thermal_store_cop": { "name": "Heat pump COP" },
@@ -727,6 +797,7 @@
       "grid_power_max_import_price": { "name": "Max import power shadow price" },
       "grid_revenue_export": { "name": "Export revenue" },
       "horizon": { "name": "Forecast horizon" },
+      "hvac_power": { "name": "Planned HVAC power" },
       "inverter_dc_bus_power_balance": { "name": "DC bus power balance shadow price" },
       "inverter_max_power_ac_to_dc_price": { "name": "Max AC to DC power shadow price" },
       "inverter_max_power_dc_to_ac_price": { "name": "Max DC to AC power shadow price" },
@@ -751,6 +822,9 @@
         "state": { "degraded": "Degraded", "failed": "Failed", "pending": "Pending", "success": "Succeeded" }
       },
       "node_power_balance": { "name": "Power balance shadow price" },
+      "room_cold_shortfall": { "name": "Cold comfort shortfall" },
+      "room_hot_shortfall": { "name": "Hot comfort shortfall" },
+      "room_temperature": { "name": "Predicted temperature" },
       "solar_forecast_limit": { "name": "Forecast limit shadow price" },
       "solar_power": { "name": "Power" },
       "thermal_store_power": { "name": "Planned heating power" },

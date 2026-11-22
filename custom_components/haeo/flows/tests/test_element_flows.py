@@ -36,6 +36,7 @@ from custom_components.haeo.core.schema.sections import CONF_CONNECTION
 from custom_components.haeo.elements import ElementOutputName, get_input_field_schema_info, get_input_fields
 from custom_components.haeo.elements.input_fields import AnyInputFieldInfo
 from custom_components.haeo.flows import HUB_SECTION_COMMON, get_element_flow_classes
+from custom_components.haeo.flows.connected_flow import connection_target_name
 
 # Policy uses a multi-step menu-driven flow incompatible with the generic single-step tests
 SINGLE_STEP_ELEMENT_TYPES: tuple[ElementType, ...] = tuple(et for et in ELEMENT_TYPES if et != ElementType.POLICY)
@@ -134,6 +135,11 @@ def _prepare_flow_context(
 ) -> None:
     """Populate dependent participants required by connection flows."""
 
+    if element_type == ElementType.ROOM:
+        parent = config.get(CONF_CONNECTION)
+        name = connection_target_name(parent)
+        assert name is not None
+        _add_participant_subentry(hass, hub_entry, name, ElementType.HVAC)
     if element_type == connection.ELEMENT_TYPE:
         endpoints = config.get(connection.SECTION_ENDPOINTS, {})
         if isinstance(endpoints, dict):
@@ -336,7 +342,9 @@ async def test_element_flow_rejects_endpoint_that_is_never_connected(
     result = await flow.async_step_user(user_input=user_input)
 
     assert result.get("type") == FlowResultType.FORM
-    assert result.get("errors") == {CONF_CONNECTION: "invalid_endpoint"}
+    assert result.get("errors") == {
+        CONF_CONNECTION: "invalid_hvac" if element_type == ElementType.ROOM else "invalid_endpoint"
+    }
 
 
 @pytest.mark.parametrize(("element_type", "section", "field_name"), REQUIRED_INPUTS)

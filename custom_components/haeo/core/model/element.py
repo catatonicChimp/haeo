@@ -51,6 +51,9 @@ class Element[OutputNameT: str](ModelComponent):
     discovery via reactive decorators, and parameter access helpers.
     """
 
+    # Flow readers can depend on earlier flow readers as well as connections.
+    dependency_order = 2
+
     # TrackedParam for periods - enables reactive invalidation when periods change
     periods: TrackedParam[NDArray[np.float64]] = TrackedParam()
 

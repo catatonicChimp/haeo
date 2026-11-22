@@ -15,11 +15,13 @@ from custom_components.haeo.core.adapters.elements.connection import adapter as 
 from custom_components.haeo.core.adapters.elements.deferrable_load import adapter as deferrable_load_adapter
 from custom_components.haeo.core.adapters.elements.ev import adapter as ev_adapter
 from custom_components.haeo.core.adapters.elements.grid import adapter as grid_adapter
+from custom_components.haeo.core.adapters.elements.hvac import adapter as hvac_adapter
 from custom_components.haeo.core.adapters.elements.inverter import adapter as inverter_adapter
 from custom_components.haeo.core.adapters.elements.junction import adapter as junction_adapter
 from custom_components.haeo.core.adapters.elements.load import adapter as load_adapter
 from custom_components.haeo.core.adapters.elements.node import adapter as node_adapter
 from custom_components.haeo.core.adapters.elements.policy import adapter as policy_adapter
+from custom_components.haeo.core.adapters.elements.room import adapter as room_adapter
 from custom_components.haeo.core.adapters.elements.solar import adapter as solar_adapter
 from custom_components.haeo.core.adapters.elements.thermal_store import adapter as thermal_store_adapter
 from custom_components.haeo.core.const import CONF_ELEMENT_TYPE, ConnectivityLevel
@@ -116,6 +118,8 @@ ELEMENT_TYPES: dict[ElementType, ElementAdapter] = {
     ElementType.BATTERY: battery_adapter,
     ElementType.DEFERRABLE_LOAD: deferrable_load_adapter,
     ElementType.THERMAL_STORE: thermal_store_adapter,
+    ElementType.HVAC: hvac_adapter,
+    ElementType.ROOM: room_adapter,
     ElementType.EV: ev_adapter,
     ElementType.CONNECTION: connection_adapter,
     ElementType.JUNCTION: junction_adapter,

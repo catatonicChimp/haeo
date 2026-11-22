@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Final, Generic, Never, Protocol, TypeGuard, TypeVar
 
-from custom_components.haeo.core.model.element import NetworkElement
+from custom_components.haeo.core.model.element import Element, NetworkElement
 
 from .battery import BATTERY_OUTPUT_NAMES as BATTERY_OUTPUT_NAMES
 from .battery import BATTERY_POWER_CONSTRAINTS as BATTERY_POWER_CONSTRAINTS
@@ -38,6 +38,7 @@ from .deferrable_load import DeferrableLoadConstraintName as DeferrableLoadConst
 from .deferrable_load import DeferrableLoadElementConfig as DeferrableLoadElementConfig
 from .deferrable_load import DeferrableLoadElementTypeName as DeferrableLoadElementTypeName
 from .deferrable_load import DeferrableLoadOutputName as DeferrableLoadOutputName
+from .hvac import Hvac, HvacElementConfig, HvacElementTypeName, hvac_arguments
 from .node import ELEMENT_TYPE as MODEL_ELEMENT_TYPE_NODE
 from .node import NODE_OUTPUT_NAMES
 from .node import Node as Node
@@ -51,6 +52,7 @@ from .policy_pricing import PolicyPricingElementConfig as PolicyPricingElementCo
 from .policy_pricing import PolicyPricingElementTypeName as PolicyPricingElementTypeName
 from .policy_pricing import PolicyPricingTerm as PolicyPricingTerm
 from .policy_pricing import policy_pricing_arguments
+from .room import ROOM_OUTPUT_NAMES, Room, RoomElementConfig, RoomElementTypeName, room_arguments
 from .segments import EfficiencySegment as EfficiencySegment
 from .segments import PassthroughSegment as PassthroughSegment
 from .segments import PowerLimitSegment as PowerLimitSegment
@@ -76,6 +78,8 @@ ModelElementType = (
     | BufferElementTypeName
     | DeferrableLoadElementTypeName
     | ThermalStoreElementTypeName
+    | HvacElementTypeName
+    | RoomElementTypeName
 )
 
 # Typed configs for all model elements (discriminated by element_type)
@@ -87,6 +91,8 @@ ModelElementConfig = (
     | BufferElementConfig
     | DeferrableLoadElementConfig
     | ThermalStoreElementConfig
+    | HvacElementConfig
+    | RoomElementConfig
 )
 
 # Configs of the elements that produce or consume power themselves, which
@@ -139,13 +145,21 @@ class ElementSpec(Generic[ConfigT_contra]):  # noqa: UP046 (a dataclass field ca
         """
         if issubclass(self.factory, NetworkElement):
             return 0
-        return 1 if issubclass(self.factory, Connection) else 2
+        return (
+            1
+            if issubclass(self.factory, Connection)
+            else self.factory.dependency_order
+            if issubclass(self.factory, Element)
+            else 2
+        )
 
 
 # Registry of all model element types, keyed by the element type strings used by Network.add().
 # Each spec is checked against its own config type where it is built; the registry holds
 # them together, so its value type admits no config and Network.add passes the one it has.
 ELEMENTS: Final[dict[ModelElementType, ElementSpec[Never]]] = {
+    "hvac": ElementSpec[HvacElementConfig](factory=Hvac, output_names=frozenset(), arguments=hvac_arguments),
+    "room": ElementSpec[RoomElementConfig](factory=Room, output_names=ROOM_OUTPUT_NAMES, arguments=room_arguments),
     MODEL_ELEMENT_TYPE_THERMAL_STORE: ElementSpec[ThermalStoreElementConfig](
         factory=ThermalStore, output_names=THERMAL_STORE_OUTPUT_NAMES, arguments=thermal_store_arguments
     ),

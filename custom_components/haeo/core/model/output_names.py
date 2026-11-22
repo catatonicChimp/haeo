@@ -9,6 +9,7 @@ from .elements.buffer import BUFFER_OUTPUT_NAMES, BufferOutputName
 from .elements.connection import CONNECTION_OUTPUT_NAMES, ConnectionOutputName
 from .elements.deferrable_load import DEFERRABLE_LOAD_OUTPUT_NAMES, DeferrableLoadOutputName
 from .elements.node import NODE_OUTPUT_NAMES, NodeOutputName
+from .elements.room import RoomOutputName
 from .elements.thermal_store import ThermalStoreOutputName
 
 # Combined type for all possible output names
@@ -19,6 +20,7 @@ type ModelOutputName = (
     | NodeOutputName
     | BufferOutputName
     | ThermalStoreOutputName
+    | RoomOutputName
 )
 
 

@@ -59,6 +59,7 @@ from custom_components.haeo.core.adapters.elements.deferrable_load import (
 )
 from custom_components.haeo.core.adapters.elements.ev import EV_OUTPUT_NAMES, EvDeviceName, EvOutputName
 from custom_components.haeo.core.adapters.elements.grid import GRID_OUTPUT_NAMES, GridDeviceName, GridOutputName
+from custom_components.haeo.core.adapters.elements.hvac import HVAC_OUTPUT_NAMES, HvacDeviceName, HvacOutputName
 from custom_components.haeo.core.adapters.elements.inverter import (
     INVERTER_OUTPUT_NAMES,
     InverterDeviceName,
@@ -72,6 +73,7 @@ from custom_components.haeo.core.adapters.elements.junction import (
 from custom_components.haeo.core.adapters.elements.load import LOAD_OUTPUT_NAMES, LoadDeviceName, LoadOutputName
 from custom_components.haeo.core.adapters.elements.node import NODE_OUTPUT_NAMES, NodeDeviceName, NodeOutputName
 from custom_components.haeo.core.adapters.elements.policy import PolicyDeviceName
+from custom_components.haeo.core.adapters.elements.room import ROOM_OUTPUT_NAMES, RoomDeviceName, RoomOutputName
 from custom_components.haeo.core.adapters.elements.solar import SOLAR_OUTPUT_NAMES, SolarDeviceName, SolarOutputName
 from custom_components.haeo.core.adapters.elements.thermal_store import (
     THERMAL_OUTPUT_NAMES,
@@ -107,6 +109,8 @@ type ElementOutputName = (
     | BufferOutputName
     | NetworkOutputName
     | ThermalOutputName
+    | HvacOutputName
+    | RoomOutputName
 )
 
 ELEMENT_OUTPUT_NAMES: Final[frozenset[ElementOutputName]] = frozenset(
@@ -124,6 +128,8 @@ ELEMENT_OUTPUT_NAMES: Final[frozenset[ElementOutputName]] = frozenset(
     | BUFFER_OUTPUT_NAMES
     | NETWORK_OUTPUT_NAMES
     | THERMAL_OUTPUT_NAMES
+    | HVAC_OUTPUT_NAMES
+    | ROOM_OUTPUT_NAMES
 )
 
 type ElementDeviceName = (
@@ -142,6 +148,8 @@ type ElementDeviceName = (
     | BufferDeviceName
     | NetworkDeviceName
     | ThermalDeviceName
+    | HvacDeviceName
+    | RoomDeviceName
 )
 
 

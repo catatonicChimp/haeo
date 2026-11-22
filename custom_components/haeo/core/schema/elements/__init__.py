@@ -19,11 +19,13 @@ from custom_components.haeo.core.schema.elements.deferrable_load import (
 from custom_components.haeo.core.schema.elements.element_type import ElementType
 from custom_components.haeo.core.schema.elements.ev import EvConfigData, EvConfigSchema
 from custom_components.haeo.core.schema.elements.grid import GridConfigData, GridConfigSchema
+from custom_components.haeo.core.schema.elements.hvac import HvacConfigData, HvacConfigSchema
 from custom_components.haeo.core.schema.elements.inverter import InverterConfigData, InverterConfigSchema
 from custom_components.haeo.core.schema.elements.junction import JunctionConfigData, JunctionConfigSchema
 from custom_components.haeo.core.schema.elements.load import LoadConfigData, LoadConfigSchema
 from custom_components.haeo.core.schema.elements.node import NodeConfigData, NodeConfigSchema
 from custom_components.haeo.core.schema.elements.policy import PolicyConfigData, PolicyConfigSchema
+from custom_components.haeo.core.schema.elements.room import RoomConfigData, RoomConfigSchema
 from custom_components.haeo.core.schema.elements.solar import SolarConfigData, SolarConfigSchema
 from custom_components.haeo.core.schema.elements.thermal_store import ThermalStoreConfigData, ThermalStoreConfigSchema
 from custom_components.haeo.core.schema.field_hints import SurfacedPriceHint
@@ -43,6 +45,8 @@ ElementConfigSchema = (
     | BufferConfigSchema
     | ConnectionConfigSchema
     | ThermalStoreConfigSchema
+    | HvacConfigSchema
+    | RoomConfigSchema
 )
 
 ElementConfigData = (
@@ -60,6 +64,8 @@ ElementConfigData = (
     | BufferConfigData
     | ConnectionConfigData
     | ThermalStoreConfigData
+    | HvacConfigData
+    | RoomConfigData
 )
 
 ELEMENT_CONFIG_SCHEMAS: Final[dict[ElementType, type]] = {
@@ -77,6 +83,8 @@ ELEMENT_CONFIG_SCHEMAS: Final[dict[ElementType, type]] = {
     ElementType.POLICY: PolicyConfigSchema,
     ElementType.SOLAR: SolarConfigSchema,
     ElementType.THERMAL_STORE: ThermalStoreConfigSchema,
+    ElementType.HVAC: HvacConfigSchema,
+    ElementType.ROOM: RoomConfigSchema,
 }
 
 # Policy pricing fields an element type shows on its own form

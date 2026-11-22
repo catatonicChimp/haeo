@@ -184,11 +184,17 @@ def get_element_flow_classes() -> dict[ElementType, type]:
     from custom_components.haeo.flows.elements.deferrable_load import DeferrableLoadSubentryFlowHandler  # noqa: PLC0415
     from custom_components.haeo.flows.elements.ev import EvSubentryFlowHandler  # noqa: PLC0415
     from custom_components.haeo.flows.elements.grid import GridSubentryFlowHandler  # noqa: PLC0415
+
+    # Lazy imports avoid a cycle with shared flow definitions.
+    from custom_components.haeo.flows.elements.hvac import HvacSubentryFlowHandler  # noqa: PLC0415
     from custom_components.haeo.flows.elements.inverter import InverterSubentryFlowHandler  # noqa: PLC0415
     from custom_components.haeo.flows.elements.junction import JunctionSubentryFlowHandler  # noqa: PLC0415
     from custom_components.haeo.flows.elements.load import LoadSubentryFlowHandler  # noqa: PLC0415
     from custom_components.haeo.flows.elements.node import NodeSubentryFlowHandler  # noqa: PLC0415
     from custom_components.haeo.flows.elements.policy import PolicySubentryFlowHandler  # noqa: PLC0415
+
+    # Lazy imports avoid a cycle with shared flow definitions.
+    from custom_components.haeo.flows.elements.room import RoomSubentryFlowHandler  # noqa: PLC0415
     from custom_components.haeo.flows.elements.solar import SolarSubentryFlowHandler  # noqa: PLC0415
 
     # Import flows lazily to avoid the shared flow package's initialization cycle.
@@ -201,6 +207,8 @@ def get_element_flow_classes() -> dict[ElementType, type]:
         ElementType.CONNECTION: ConnectionSubentryFlowHandler,
         ElementType.DEFERRABLE_LOAD: DeferrableLoadSubentryFlowHandler,
         ElementType.THERMAL_STORE: ThermalStoreSubentryFlowHandler,
+        ElementType.HVAC: HvacSubentryFlowHandler,
+        ElementType.ROOM: RoomSubentryFlowHandler,
         ElementType.EV: EvSubentryFlowHandler,
         ElementType.GRID: GridSubentryFlowHandler,
         ElementType.INVERTER: InverterSubentryFlowHandler,
