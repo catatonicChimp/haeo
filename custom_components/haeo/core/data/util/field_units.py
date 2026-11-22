@@ -23,6 +23,7 @@ NON_NEGATIVE_OUTPUT_TYPES: Final = frozenset(
 
 # The base unit each input field's values are in, with how to name it to a user
 _FIELD_UNITS: Final[dict[OutputType, tuple[UnitSpec, str]]] = {
+    OutputType.TEMPERATURE: (UnitOfMeasurement.CELSIUS.value, UnitOfMeasurement.CELSIUS.value),
     OutputType.POWER: (UnitOfMeasurement.KILO_WATT.value, UnitOfMeasurement.KILO_WATT.value),
     OutputType.POWER_FLOW: (UnitOfMeasurement.KILO_WATT.value, UnitOfMeasurement.KILO_WATT.value),
     OutputType.POWER_LIMIT: (UnitOfMeasurement.KILO_WATT.value, UnitOfMeasurement.KILO_WATT.value),

@@ -58,6 +58,14 @@ from .segments import PricingSegment as PricingSegment
 from .segments import Segment as Segment
 from .segments import SegmentSpec as SegmentSpec
 from .segments import SegmentType as SegmentType
+from .thermal_store import ELEMENT_TYPE as MODEL_ELEMENT_TYPE_THERMAL_STORE
+from .thermal_store import (
+    THERMAL_STORE_OUTPUT_NAMES,
+    ThermalStore,
+    ThermalStoreElementConfig,
+    ThermalStoreElementTypeName,
+    thermal_store_arguments,
+)
 
 # Type for all model element types
 ModelElementType = (
@@ -67,6 +75,7 @@ ModelElementType = (
     | PolicyPricingElementTypeName
     | BufferElementTypeName
     | DeferrableLoadElementTypeName
+    | ThermalStoreElementTypeName
 )
 
 # Typed configs for all model elements (discriminated by element_type)
@@ -77,6 +86,7 @@ ModelElementConfig = (
     | PolicyPricingElementConfig
     | BufferElementConfig
     | DeferrableLoadElementConfig
+    | ThermalStoreElementConfig
 )
 
 # Configs of the elements that produce or consume power themselves, which
@@ -136,6 +146,9 @@ class ElementSpec(Generic[ConfigT_contra]):  # noqa: UP046 (a dataclass field ca
 # Each spec is checked against its own config type where it is built; the registry holds
 # them together, so its value type admits no config and Network.add passes the one it has.
 ELEMENTS: Final[dict[ModelElementType, ElementSpec[Never]]] = {
+    MODEL_ELEMENT_TYPE_THERMAL_STORE: ElementSpec[ThermalStoreElementConfig](
+        factory=ThermalStore, output_names=THERMAL_STORE_OUTPUT_NAMES, arguments=thermal_store_arguments
+    ),
     MODEL_ELEMENT_TYPE_BATTERY: ElementSpec[BatteryElementConfig](
         factory=Battery, output_names=BATTERY_OUTPUT_NAMES, arguments=config_arguments
     ),

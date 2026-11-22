@@ -556,6 +556,42 @@
         "states_required": "Choose at least one state"
       },
       "abort": { "reconfigure_successful": "Configuration updated successfully" }
+    },
+    "thermal_store": {
+      "flow_title": "Thermal store (shadow)",
+      "entry_type": "Thermal store (shadow)",
+      "initiate_flow": { "user": "Add thermal store (shadow)", "reconfigure": "Thermal store (shadow)" },
+      "step": {
+        "user": {
+          "title": "Thermal store (forecast only)",
+          "description": "Use a separate shadow hub. This experimental model has no appliance commands. Thermal capacity, COP and draw are estimates until calibrated.",
+          "data": { "connection": "Connection", "name": "Name" },
+          "sections": {
+            "thermal": {
+              "data": {
+                "capacity_per_degree": "Effective thermal capacity (kWh/K)",
+                "cop": "Heat pump COP",
+                "draw_power": "Expected hot-water draw (thermal kW)",
+                "initial_temperature": "Measured tank temperature",
+                "loss_power": "Standing heat loss (thermal kW)",
+                "max_power": "Maximum electrical power",
+                "maximum_temperature": "Physical maximum temperature",
+                "shortfall_price": "Readiness shortfall price",
+                "target_temperature": "Readiness temperature"
+              },
+              "name": "Thermal model"
+            }
+          }
+        }
+      },
+      "error": {
+        "invalid_endpoint": "This element applies its own prices, forecasts, and limits on its own connection, so it cannot be connected to directly. Choose the element it is connected to instead.",
+        "missing_name": "Name is required",
+        "name_exists": "A device with this name already exists",
+        "required": "Choose an entity or enter a value for every required field in this section"
+      },
+      "abort": { "reconfigure_successful": "Configuration updated successfully" },
+      "title": "Thermal store (shadow)"
     }
   },
   "common": {
@@ -578,7 +614,8 @@
     "network": { "name": "Optimizer" },
     "node": { "name": "{name}" },
     "policy": { "name": "Policies" },
-    "solar": { "name": "{name}" }
+    "solar": { "name": "{name}" },
+    "thermal_store": { "name": "{name}" }
   },
   "entity": {
     "number": {
@@ -632,7 +669,16 @@
       "load_consumption_cost": { "name": "Consumption cost" },
       "load_forecast": { "name": "Forecast" },
       "policy_price": { "name": "{rule_name} price" },
-      "solar_forecast": { "name": "Forecast" }
+      "solar_forecast": { "name": "Forecast" },
+      "thermal_store_capacity_per_degree": { "name": "Effective thermal capacity (kWh/K)" },
+      "thermal_store_cop": { "name": "Heat pump COP" },
+      "thermal_store_draw_power": { "name": "Expected hot-water draw (thermal kW)" },
+      "thermal_store_initial_temperature": { "name": "Measured tank temperature" },
+      "thermal_store_loss_power": { "name": "Standing heat loss (thermal kW)" },
+      "thermal_store_max_power": { "name": "Maximum electrical power" },
+      "thermal_store_maximum_temperature": { "name": "Physical maximum temperature" },
+      "thermal_store_shortfall_price": { "name": "Readiness shortfall price" },
+      "thermal_store_target_temperature": { "name": "Readiness temperature" }
     },
     "sensor": {
       "battery_energy_in_flow": { "name": "Energy in flow shadow price" },
@@ -706,7 +752,10 @@
       },
       "node_power_balance": { "name": "Power balance shadow price" },
       "solar_forecast_limit": { "name": "Forecast limit shadow price" },
-      "solar_power": { "name": "Power" }
+      "solar_power": { "name": "Power" },
+      "thermal_store_power": { "name": "Planned heating power" },
+      "thermal_store_shortfall": { "name": "Readiness shortfall" },
+      "thermal_store_temperature": { "name": "Predicted tank temperature" }
     },
     "switch": {
       "deferrable_load_in_window": { "name": "Run window" },

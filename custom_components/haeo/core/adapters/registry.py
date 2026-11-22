@@ -21,6 +21,7 @@ from custom_components.haeo.core.adapters.elements.load import adapter as load_a
 from custom_components.haeo.core.adapters.elements.node import adapter as node_adapter
 from custom_components.haeo.core.adapters.elements.policy import adapter as policy_adapter
 from custom_components.haeo.core.adapters.elements.solar import adapter as solar_adapter
+from custom_components.haeo.core.adapters.elements.thermal_store import adapter as thermal_store_adapter
 from custom_components.haeo.core.const import CONF_ELEMENT_TYPE, ConnectivityLevel
 from custom_components.haeo.core.model import ModelElementConfig, ModelOutputName
 from custom_components.haeo.core.model.elements import ELEMENTS
@@ -114,6 +115,7 @@ ELEMENT_TYPES: dict[ElementType, ElementAdapter] = {
     ElementType.SOLAR: solar_adapter,
     ElementType.BATTERY: battery_adapter,
     ElementType.DEFERRABLE_LOAD: deferrable_load_adapter,
+    ElementType.THERMAL_STORE: thermal_store_adapter,
     ElementType.EV: ev_adapter,
     ElementType.CONNECTION: connection_adapter,
     ElementType.JUNCTION: junction_adapter,

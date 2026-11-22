@@ -191,12 +191,16 @@ def get_element_flow_classes() -> dict[ElementType, type]:
     from custom_components.haeo.flows.elements.policy import PolicySubentryFlowHandler  # noqa: PLC0415
     from custom_components.haeo.flows.elements.solar import SolarSubentryFlowHandler  # noqa: PLC0415
 
+    # Import flows lazily to avoid the shared flow package's initialization cycle.
+    from custom_components.haeo.flows.elements.thermal_store import ThermalStoreSubentryFlowHandler  # noqa: PLC0415
+
     return {
         ElementType.BATTERY: BatterySubentryFlowHandler,
         ElementType.BATTERY_SECTION: BatterySectionSubentryFlowHandler,
         ElementType.BUFFER: BufferSubentryFlowHandler,
         ElementType.CONNECTION: ConnectionSubentryFlowHandler,
         ElementType.DEFERRABLE_LOAD: DeferrableLoadSubentryFlowHandler,
+        ElementType.THERMAL_STORE: ThermalStoreSubentryFlowHandler,
         ElementType.EV: EvSubentryFlowHandler,
         ElementType.GRID: GridSubentryFlowHandler,
         ElementType.INVERTER: InverterSubentryFlowHandler,

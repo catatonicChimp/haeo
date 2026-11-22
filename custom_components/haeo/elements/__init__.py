@@ -73,6 +73,11 @@ from custom_components.haeo.core.adapters.elements.load import LOAD_OUTPUT_NAMES
 from custom_components.haeo.core.adapters.elements.node import NODE_OUTPUT_NAMES, NodeDeviceName, NodeOutputName
 from custom_components.haeo.core.adapters.elements.policy import PolicyDeviceName
 from custom_components.haeo.core.adapters.elements.solar import SOLAR_OUTPUT_NAMES, SolarDeviceName, SolarOutputName
+from custom_components.haeo.core.adapters.elements.thermal_store import (
+    THERMAL_OUTPUT_NAMES,
+    ThermalDeviceName,
+    ThermalOutputName,
+)
 from custom_components.haeo.core.adapters.registry import ELEMENT_TYPES, is_element_type
 from custom_components.haeo.core.const import CONF_ELEMENT_TYPE
 from custom_components.haeo.core.schema.elements import ELEMENT_CONFIG_SCHEMAS, ElementConfigSchema, ElementType
@@ -101,6 +106,7 @@ type ElementOutputName = (
     | SolarOutputName
     | BufferOutputName
     | NetworkOutputName
+    | ThermalOutputName
 )
 
 ELEMENT_OUTPUT_NAMES: Final[frozenset[ElementOutputName]] = frozenset(
@@ -117,6 +123,7 @@ ELEMENT_OUTPUT_NAMES: Final[frozenset[ElementOutputName]] = frozenset(
     | SOLAR_OUTPUT_NAMES
     | BUFFER_OUTPUT_NAMES
     | NETWORK_OUTPUT_NAMES
+    | THERMAL_OUTPUT_NAMES
 )
 
 type ElementDeviceName = (
@@ -134,6 +141,7 @@ type ElementDeviceName = (
     | PolicyDeviceName
     | BufferDeviceName
     | NetworkDeviceName
+    | ThermalDeviceName
 )
 
 

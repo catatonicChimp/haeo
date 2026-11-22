@@ -38,6 +38,20 @@ class OutputTypeMetadata:
 
 
 OUTPUT_TYPE_DEFAULTS: dict[OutputType, OutputTypeMetadata] = {
+    OutputType.COEFFICIENT: OutputTypeMetadata(
+        unit=None,
+        device_class=None,
+        min_value=0.0001,
+        max_value=1000.0,
+        step=0.001,
+    ),
+    OutputType.TEMPERATURE: OutputTypeMetadata(
+        unit=UnitOfMeasurement.CELSIUS,
+        device_class=NumberDeviceClass.TEMPERATURE,
+        min_value=-50.0,
+        max_value=100.0,
+        step=0.1,
+    ),
     OutputType.POWER: OutputTypeMetadata(
         unit=UnitOfMeasurement.KILO_WATT,
         device_class=NumberDeviceClass.POWER,

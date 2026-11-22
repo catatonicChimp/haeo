@@ -27,6 +27,7 @@ from .elements.connection import Connection, ConnectionElementConfig, Connection
 from .elements.deferrable_load import DeferrableLoad, DeferrableLoadElementConfig
 from .elements.node import Node, NodeElementConfig
 from .elements.policy_pricing import PolicyPricing, PolicyPricingElementConfig
+from .elements.thermal_store import ThermalStore, ThermalStoreElementConfig
 from .infeasibility import InfeasibleError, Relaxation, RowLabel, conflicting_rows, listing, row_labels, solve_relaxed
 from .linear import LinearArray, total
 from .solver import Solver
@@ -228,6 +229,9 @@ class Network:
 
         for element in self.elements.values():
             element.update_periods(self.periods)
+
+    @overload
+    def add(self, element_config: ThermalStoreElementConfig) -> ThermalStore: ...
 
     @overload
     def add(self, element_config: BatteryElementConfig) -> Battery: ...

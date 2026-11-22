@@ -25,6 +25,7 @@ from custom_components.haeo.core.schema.elements.load import LoadConfigData, Loa
 from custom_components.haeo.core.schema.elements.node import NodeConfigData, NodeConfigSchema
 from custom_components.haeo.core.schema.elements.policy import PolicyConfigData, PolicyConfigSchema
 from custom_components.haeo.core.schema.elements.solar import SolarConfigData, SolarConfigSchema
+from custom_components.haeo.core.schema.elements.thermal_store import ThermalStoreConfigData, ThermalStoreConfigSchema
 from custom_components.haeo.core.schema.field_hints import SurfacedPriceHint
 
 ElementConfigSchema = (
@@ -41,6 +42,7 @@ ElementConfigSchema = (
     | PolicyConfigSchema
     | BufferConfigSchema
     | ConnectionConfigSchema
+    | ThermalStoreConfigSchema
 )
 
 ElementConfigData = (
@@ -57,6 +59,7 @@ ElementConfigData = (
     | PolicyConfigData
     | BufferConfigData
     | ConnectionConfigData
+    | ThermalStoreConfigData
 )
 
 ELEMENT_CONFIG_SCHEMAS: Final[dict[ElementType, type]] = {
@@ -73,6 +76,7 @@ ELEMENT_CONFIG_SCHEMAS: Final[dict[ElementType, type]] = {
     ElementType.NODE: NodeConfigSchema,
     ElementType.POLICY: PolicyConfigSchema,
     ElementType.SOLAR: SolarConfigSchema,
+    ElementType.THERMAL_STORE: ThermalStoreConfigSchema,
 }
 
 # Policy pricing fields an element type shows on its own form

@@ -139,6 +139,7 @@ class CoordinatorOutput:
 
 
 DEVICE_CLASS_MAP: dict[OutputType, SensorDeviceClass] = {
+    OutputType.TEMPERATURE: SensorDeviceClass.TEMPERATURE,
     OutputType.POWER: SensorDeviceClass.POWER,
     OutputType.POWER_FLOW: SensorDeviceClass.POWER,
     OutputType.POWER_LIMIT: SensorDeviceClass.POWER,
@@ -152,6 +153,7 @@ DEVICE_CLASS_MAP: dict[OutputType, SensorDeviceClass] = {
 }
 
 STATE_CLASS_MAP: dict[OutputType, SensorStateClass | None] = {
+    OutputType.TEMPERATURE: SensorStateClass.MEASUREMENT,
     OutputType.POWER: SensorStateClass.MEASUREMENT,
     OutputType.POWER_FLOW: SensorStateClass.MEASUREMENT,
     OutputType.POWER_LIMIT: SensorStateClass.MEASUREMENT,

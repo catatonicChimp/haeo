@@ -18,4 +18,5 @@ class ElementType(StrEnum):
     LOAD = "load"
     NODE = "node"
     SOLAR = "solar"
+    THERMAL_STORE = "thermal_store"
     POLICY = "policy"

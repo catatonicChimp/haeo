@@ -19,6 +19,7 @@ class DeviceClass(StrEnum):
     MONETARY = "monetary"
     DISTANCE = "distance"
     ENERGY_DISTANCE = "energy_distance"
+    TEMPERATURE = "temperature"
 
     @classmethod
     def of(cls, value: object) -> "DeviceClass | None":
@@ -34,6 +35,8 @@ class UnitOfMeasurement(StrEnum):
 
     WATT = "W"
     KILO_WATT = "kW"
+    CELSIUS = "°C"
+    FAHRENHEIT = "°F"
     MEGA_WATT = "MW"
     GIGA_WATT = "GW"
     WATT_HOUR = "Wh"
@@ -109,6 +112,7 @@ _UNITS_BY_KEY: Final[dict[str, UnitOfMeasurement]] = {_unit_key(unit.value): uni
 
 
 BASE_UNITS: Final[dict[DeviceClass, UnitOfMeasurement]] = {
+    DeviceClass.TEMPERATURE: UnitOfMeasurement.CELSIUS,
     DeviceClass.POWER: UnitOfMeasurement.KILO_WATT,
     DeviceClass.ENERGY: UnitOfMeasurement.KILO_WATT_HOUR,
     DeviceClass.ENERGY_STORAGE: UnitOfMeasurement.KILO_WATT_HOUR,
@@ -168,6 +172,7 @@ _DISTANCE_ENERGY_TO_KM_PER_KWH: Final[dict[UnitOfMeasurement, float]] = {
 
 # Factors to each device class's base unit, for every device class that has one
 _TO_BASE_UNIT: Final[dict[DeviceClass, dict[UnitOfMeasurement, float]]] = {
+    DeviceClass.TEMPERATURE: {UnitOfMeasurement.CELSIUS: 1.0},
     DeviceClass.POWER: _POWER_TO_KW,
     DeviceClass.ENERGY: _ENERGY_TO_KWH,
     DeviceClass.ENERGY_STORAGE: _ENERGY_TO_KWH,
@@ -192,6 +197,7 @@ class UnitConversion:
 
     factor: float = 1.0
     reciprocal: bool = False
+    offset: float = 0.0
 
     @overload
     def apply(self, values: float) -> float: ...
@@ -205,7 +211,7 @@ class UnitConversion:
                 finite value in the base unit.
 
         """
-        scaled = values * self.factor
+        scaled = values * self.factor + self.offset
         if not self.reciprocal:
             return scaled
         if np.any(np.equal(scaled, 0)):
@@ -269,6 +275,8 @@ def localize_currency(unit: str | None, currency: str) -> str | None:
 
 def _infer_device_class_from_unit(unit: UnitOfMeasurement | None) -> DeviceClass | None:
     """Infer a device class from unit when no explicit class is available."""
+    if unit in {UnitOfMeasurement.CELSIUS, UnitOfMeasurement.FAHRENHEIT}:
+        return DeviceClass.TEMPERATURE
     if unit in {
         UnitOfMeasurement.WATT,
         UnitOfMeasurement.KILO_WATT,
@@ -309,6 +317,8 @@ def _base_conversion(unit: UnitOfMeasurement | None, device_class: DeviceClass |
         return None
     if unit == base_unit:
         return UnitConversion()
+    if device_class == DeviceClass.TEMPERATURE and unit == UnitOfMeasurement.FAHRENHEIT:
+        return UnitConversion(5 / 9, offset=-32 * 5 / 9)
     if (factor := _TO_BASE_UNIT[device_class].get(unit)) is not None:
         return UnitConversion(factor)
     if (factor := _TO_RECIPROCAL_BASE_UNIT.get(device_class, {}).get(unit)) is not None:

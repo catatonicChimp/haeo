@@ -41,6 +41,8 @@ class OutputType(StrEnum):
     POWER_FLOW = auto()
     POWER_LIMIT = auto()
     ENERGY = auto()
+    TEMPERATURE = auto()
+    COEFFICIENT = auto()
     PRICE = auto()
     PRICE_RATE = auto()
     STATE_OF_CHARGE = auto()
