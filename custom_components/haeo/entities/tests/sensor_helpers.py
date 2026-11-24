@@ -9,6 +9,7 @@ from unittest.mock import Mock
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import EntityCategory
+from homeassistant.helpers.typing import StateType
 from homeassistant.util import dt as dt_util
 
 from custom_components.haeo.coordinator import CoordinatorData, CoordinatorOutput, ForecastPoint, OptimizationContext
@@ -69,7 +70,7 @@ def make_output(
     *,
     type_: OutputType,
     unit: str | None,
-    state: float | str | None,
+    state: StateType | datetime | None,
     forecast: list[ForecastPoint] | None,
     entity_category: EntityCategory | None,
     device_class: SensorDeviceClass | None,

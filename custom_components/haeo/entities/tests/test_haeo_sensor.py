@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import UTC, datetime
+import logging
 
 # Coordinator output fixtures use runtime string keys that cannot satisfy the
 # Literal key types of SubentryDevices.
@@ -10,7 +11,10 @@ from unittest.mock import Mock
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import EntityCategory
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_component
 from homeassistant.helpers.device_registry import DeviceEntry
+from homeassistant.util import dt as dt_util
 import pytest
 
 from custom_components.haeo.const import CONF_RECORD_FORECASTS
@@ -474,3 +478,91 @@ def test_advanced_outputs_are_disabled_by_default(
     )
 
     assert sensor.entity_registry_enabled_default is enabled_default
+
+
+async def test_planned_start_publishes_a_timestamp_state(
+    hass: HomeAssistant, device_entry: DeviceEntry, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A timestamp output reaches Home Assistant as a datetime and renders as an ISO state."""
+    start = datetime(2026, 1, 1, 3, tzinfo=dt_util.get_default_time_zone())
+    output = make_output(
+        type_=OutputType.TIMESTAMP,
+        unit=None,
+        state=start,
+        forecast=None,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        device_class=SensorDeviceClass.TIMESTAMP,
+        state_class=None,
+        options=None,
+    )
+    coordinator = create_mock_coordinator()
+    coordinator.data = make_coordinator_data(
+        {"dishwasher": {ElementType.APPLIANCE: {"appliance_planned_start": output}}}
+    )
+
+    sensor = HaeoSensor(
+        coordinator,
+        device_entry=device_entry,
+        subentry_key="dishwasher",
+        device_key=ElementType.APPLIANCE,
+        element_title="Dishwasher",
+        element_type="appliance",
+        output_name="appliance_planned_start",
+        output_data=output,
+        unique_id="sensor-id",
+    )
+    sensor.entity_id = "sensor.dishwasher_planned_start"
+
+    with caplog.at_level(logging.WARNING):
+        component = entity_component.EntityComponent(logging.getLogger(__name__), "sensor", hass)
+        await component.async_add_entities([sensor])
+
+    # Home Assistant's timestamp contract takes the native datetime and renders it itself
+    assert sensor.native_value is start
+    state = hass.states.get("sensor.dishwasher_planned_start")
+    assert state is not None
+    assert state.state == start.astimezone(UTC).isoformat(timespec="seconds")
+    assert not [record for record in caplog.records if record.levelno >= logging.WARNING]
+
+
+async def test_unavailable_planned_start_publishes_unavailable(
+    hass: HomeAssistant, device_entry: DeviceEntry, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A disarmed or infeasible run leaves the timestamp sensor unavailable, without an error."""
+    output = make_output(
+        type_=OutputType.TIMESTAMP,
+        unit=None,
+        state=None,
+        forecast=None,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        device_class=SensorDeviceClass.TIMESTAMP,
+        state_class=None,
+        options=None,
+    )
+    unavailable = replace(output, available=False)
+    coordinator = create_mock_coordinator()
+    coordinator.data = make_coordinator_data(
+        {"dishwasher": {ElementType.APPLIANCE: {"appliance_planned_start": unavailable}}}
+    )
+
+    sensor = HaeoSensor(
+        coordinator,
+        device_entry=device_entry,
+        subentry_key="dishwasher",
+        device_key=ElementType.APPLIANCE,
+        element_title="Dishwasher",
+        element_type="appliance",
+        output_name="appliance_planned_start",
+        output_data=unavailable,
+        unique_id="sensor-id",
+    )
+    sensor.entity_id = "sensor.dishwasher_planned_start"
+
+    with caplog.at_level(logging.WARNING):
+        component = entity_component.EntityComponent(logging.getLogger(__name__), "sensor", hass)
+        await component.async_add_entities([sensor])
+
+    state = hass.states.get("sensor.dishwasher_planned_start")
+    assert state is not None
+    assert state.state == "unavailable"
+    assert not [record for record in caplog.records if record.levelno >= logging.WARNING]

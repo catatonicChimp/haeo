@@ -95,7 +95,7 @@ class HaeoSensor(CoordinatorEntity[HaeoDataUpdateCoordinator], SensorEntity):
         """Handle updates from the coordinator."""
 
         attributes = output_attributes(self._element_title, self._element_type, self._output_name, self._output_type)
-        native_value: StateType | None = None
+        native_value: StateType | datetime | None = None
 
         # Navigate the nested structure: subentry -> device -> outputs
         subentry_devices = self.coordinator.data.outputs.get(self._subentry_key) if self.coordinator.data else None
@@ -114,7 +114,7 @@ class HaeoSensor(CoordinatorEntity[HaeoDataUpdateCoordinator], SensorEntity):
                     attributes["fixed"] = True
                 self._apply_output(output_data)
                 if output_data.state is not None:
-                    native_value = self._scale_percentage_state(output_data.unit, self._state_value(output_data.state))
+                    native_value = self._scale_percentage_state(output_data.unit, output_data.state)
 
                 if output_data.forecast:
                     attributes["forecast"] = self._scale_percentage_forecast(output_data.unit, output_data.forecast)
@@ -139,7 +139,9 @@ class HaeoSensor(CoordinatorEntity[HaeoDataUpdateCoordinator], SensorEntity):
 
     def _apply_output(self, output: CoordinatorOutput) -> None:
         """Apply device class, options, and unit metadata for an output."""
-        self._attr_native_value = self._state_value(output.state)
+        # A timestamp output keeps its datetime: Home Assistant's timestamp sensor
+        # contract reads tzinfo off the native value and renders the ISO string itself
+        self._attr_native_value = output.state
         self._attr_entity_category = output.entity_category
         self._attr_native_unit_of_measurement = output.unit
         self._attr_device_class = output.device_class
@@ -149,13 +151,8 @@ class HaeoSensor(CoordinatorEntity[HaeoDataUpdateCoordinator], SensorEntity):
         self._output_available = output.available
 
     @staticmethod
-    def _state_value(value: StateType | datetime | None) -> StateType:
-        """Return a Home Assistant state, as an ISO timestamp when the output is a datetime."""
-        return value.isoformat() if isinstance(value, datetime) else value
-
-    @staticmethod
-    def _scale_percentage_state(unit: str | None, value: StateType) -> StateType:
-        if unit != PERCENTAGE or value is None:
+    def _scale_percentage_state(unit: str | None, value: StateType | datetime) -> StateType | datetime:
+        if unit != PERCENTAGE or value is None or isinstance(value, datetime):
             return value
         return float(value) * 100.0
 
