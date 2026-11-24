@@ -1,5 +1,7 @@
 """Simplified sensor implementation for HAEO outputs."""
 
+from datetime import datetime
+
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
 from homeassistant.const import PERCENTAGE
 from homeassistant.core import callback
@@ -36,6 +38,7 @@ class HaeoSensor(CoordinatorEntity[HaeoDataUpdateCoordinator], SensorEntity):
 
     _attr_should_poll = False
     _attr_has_entity_name = True
+    _output_available: bool = True
 
     def __init__(
         self,
@@ -84,8 +87,8 @@ class HaeoSensor(CoordinatorEntity[HaeoDataUpdateCoordinator], SensorEntity):
 
     @property
     def available(self) -> bool:  # pyright: ignore[reportIncompatibleVariableOverride]  # Entity declares available as a cached_property
-        """Return if sensor is available based on coordinator success."""
-        return super().available and self.coordinator.last_update_success
+        """Return if sensor is available based on coordinator success and its output."""
+        return super().available and self.coordinator.last_update_success and self._output_available
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -111,7 +114,7 @@ class HaeoSensor(CoordinatorEntity[HaeoDataUpdateCoordinator], SensorEntity):
                     attributes["fixed"] = True
                 self._apply_output(output_data)
                 if output_data.state is not None:
-                    native_value = self._scale_percentage_state(output_data.unit, output_data.state)
+                    native_value = self._scale_percentage_state(output_data.unit, self._state_value(output_data.state))
 
                 if output_data.forecast:
                     attributes["forecast"] = self._scale_percentage_forecast(output_data.unit, output_data.forecast)
@@ -136,13 +139,19 @@ class HaeoSensor(CoordinatorEntity[HaeoDataUpdateCoordinator], SensorEntity):
 
     def _apply_output(self, output: CoordinatorOutput) -> None:
         """Apply device class, options, and unit metadata for an output."""
-        self._attr_native_value = output.state
+        self._attr_native_value = self._state_value(output.state)
         self._attr_entity_category = output.entity_category
         self._attr_native_unit_of_measurement = output.unit
         self._attr_device_class = output.device_class
         self._attr_state_class = output.state_class
         self._attr_options = list(output.options) if output.options is not None else None
         self._attr_suggested_display_precision = output.display_precision
+        self._output_available = output.available
+
+    @staticmethod
+    def _state_value(value: StateType | datetime | None) -> StateType:
+        """Return a Home Assistant state, as an ISO timestamp when the output is a datetime."""
+        return value.isoformat() if isinstance(value, datetime) else value
 
     @staticmethod
     def _scale_percentage_state(unit: str | None, value: StateType) -> StateType:

@@ -123,7 +123,7 @@ class CoordinatorOutput:
 
     type: OutputType
     unit: str | None
-    state: StateType | None
+    state: StateType | datetime | None
     forecast: list[ForecastPoint] | None
     # How the forecast varies between its points, when it is not linear
     interpolation_mode: InterpolationMode | None = None
@@ -136,6 +136,7 @@ class CoordinatorOutput:
     priority: int | None = None
     fixed: bool = False
     display_precision: int | None = None
+    available: bool = True
 
 
 DEVICE_CLASS_MAP: dict[OutputType, SensorDeviceClass] = {
@@ -149,6 +150,7 @@ DEVICE_CLASS_MAP: dict[OutputType, SensorDeviceClass] = {
     OutputType.PRICE: SensorDeviceClass.MONETARY,
     OutputType.SHADOW_PRICE: SensorDeviceClass.MONETARY,
     OutputType.DURATION: SensorDeviceClass.DURATION,
+    OutputType.TIMESTAMP: SensorDeviceClass.TIMESTAMP,
     OutputType.STATUS: SensorDeviceClass.ENUM,
 }
 
@@ -294,6 +296,7 @@ def build_coordinator_output(
         priority=output_data.priority,
         fixed=output_data.fixed,
         display_precision=output_data.display_precision,
+        available=output_data.available,
     )
 
 
@@ -762,7 +765,13 @@ class HaeoDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
         for (name, field_path), store in self._runtime_data.input_stores.items():
             field_values.setdefault(name, {})[field_path] = store.value
         return {
-            name: load_element_config_from_values(name, config, field_values.get(name, {}), forecast_times)
+            name: load_element_config_from_values(
+                name,
+                config,
+                field_values.get(name, {}),
+                forecast_times,
+                time_zone=dt_util.get_default_time_zone(),
+            )
             for name, config in self._participant_configs.items()
         }
 
@@ -1122,6 +1131,7 @@ class HaeoDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     model_outputs=model_outputs,
                     config=loaded_configs[element_name],
                     periods=network.periods,
+                    forecast_times=forecast_times,
                 )
             except KeyError:
                 _LOGGER.exception(

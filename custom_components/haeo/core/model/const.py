@@ -33,6 +33,7 @@ class OutputType(StrEnum):
         DISTANCE: Distance quantity (km)
         ENERGY_PER_DISTANCE: Energy consumption per distance (kWh/km)
         DURATION: Time duration
+        TIMESTAMP: An instant, such as a planned start
         SHADOW_PRICE: Shadow prices from LP constraints
 
     """
@@ -53,6 +54,7 @@ class OutputType(StrEnum):
     DISTANCE = auto()
     ENERGY_PER_DISTANCE = auto()
     DURATION = auto()
+    TIMESTAMP = auto()
     SHADOW_PRICE = auto()
 
 

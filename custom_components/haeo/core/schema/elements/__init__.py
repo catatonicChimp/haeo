@@ -5,6 +5,7 @@ from typing import Final
 
 from custom_components.haeo.core.schema.connection_target import map_connection_targets
 from custom_components.haeo.core.schema.elements import battery, buffer, load, policy
+from custom_components.haeo.core.schema.elements.appliance import ApplianceConfigData, ApplianceConfigSchema
 from custom_components.haeo.core.schema.elements.battery import BatteryConfigData, BatteryConfigSchema
 from custom_components.haeo.core.schema.elements.battery_section import (
     BatterySectionConfigData,
@@ -47,6 +48,7 @@ ElementConfigSchema = (
     | ThermalStoreConfigSchema
     | HvacConfigSchema
     | RoomConfigSchema
+    | ApplianceConfigSchema
 )
 
 ElementConfigData = (
@@ -66,6 +68,7 @@ ElementConfigData = (
     | ThermalStoreConfigData
     | HvacConfigData
     | RoomConfigData
+    | ApplianceConfigData
 )
 
 ELEMENT_CONFIG_SCHEMAS: Final[dict[ElementType, type]] = {
@@ -85,6 +88,7 @@ ELEMENT_CONFIG_SCHEMAS: Final[dict[ElementType, type]] = {
     ElementType.THERMAL_STORE: ThermalStoreConfigSchema,
     ElementType.HVAC: HvacConfigSchema,
     ElementType.ROOM: RoomConfigSchema,
+    ElementType.APPLIANCE: ApplianceConfigSchema,
 }
 
 # Policy pricing fields an element type shows on its own form

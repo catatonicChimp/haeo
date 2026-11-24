@@ -5,8 +5,9 @@ Modules are found through the adapter registry, so a registered type without a m
 """
 
 from collections.abc import Mapping
+from datetime import datetime
 from importlib import import_module
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 import numpy as np
 from numpy.typing import NDArray
@@ -33,6 +34,8 @@ class OutputsCase(TypedDict):
     model_outputs: Mapping[str, Mapping[ModelOutputName, ModelOutputValue]]
     periods: NDArray[np.float64]
     outputs: Mapping[str, Mapping[str, OutputData]]
+    # Bound to each period for outputs that report an instant, such as a start
+    forecast_times: NotRequired[tuple[datetime, ...]]
 
 
 CREATE_CASES: list[CreateCase] = [

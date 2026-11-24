@@ -36,6 +36,11 @@ from custom_components.haeo.const import (
     NetworkDeviceName,
     NetworkOutputName,
 )
+from custom_components.haeo.core.adapters.elements.appliance import (
+    APPLIANCE_ELEMENT_OUTPUT_NAMES,
+    ApplianceDeviceName,
+    ApplianceElementOutputName,
+)
 from custom_components.haeo.core.adapters.elements.battery import (
     BATTERY_OUTPUT_NAMES,
     BatteryDeviceName,
@@ -95,7 +100,8 @@ _LOGGER = logging.getLogger(__name__)
 
 
 type ElementOutputName = (
-    InverterOutputName
+    ApplianceElementOutputName
+    | InverterOutputName
     | BatteryOutputName
     | BatterySectionOutputName
     | ConnectionOutputName
@@ -114,7 +120,8 @@ type ElementOutputName = (
 )
 
 ELEMENT_OUTPUT_NAMES: Final[frozenset[ElementOutputName]] = frozenset(
-    INVERTER_OUTPUT_NAMES
+    APPLIANCE_ELEMENT_OUTPUT_NAMES
+    | INVERTER_OUTPUT_NAMES
     | BATTERY_OUTPUT_NAMES
     | BATTERY_SECTION_OUTPUT_NAMES
     | CONNECTION_OUTPUT_NAMES
@@ -133,7 +140,8 @@ ELEMENT_OUTPUT_NAMES: Final[frozenset[ElementOutputName]] = frozenset(
 )
 
 type ElementDeviceName = (
-    InverterDeviceName
+    ApplianceDeviceName
+    | InverterDeviceName
     | BatteryDeviceName
     | BatterySectionDeviceName
     | ConnectionDeviceName

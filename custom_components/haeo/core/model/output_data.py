@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import KW_ONLY, dataclass
+from datetime import datetime
 from typing import (
     Any,  # noqa: TID251  # values mixes float (most outputs) and str (STATUS); adapters outside
     # core/ do float arithmetic on values without narrowing, so a precise union would break them
@@ -32,7 +33,10 @@ class OutputData:
             ``state_last`` / ``values[0]``). Use when the per-interval ``values``
             sequence should drive the forecast attribute but a separately computed
             scalar (e.g. a clipped 24h total or a running total) is the meaningful
-            state.
+            state. A timestamp output carries its instant here.
+        available: Whether the output describes something the plan could decide.
+            False marks the sensor unavailable, such as a planned start that no
+            feasible run gives.
         priority: Connection time-preference priority. Lower values are preferred
             earlier by the secondary objective. None for non-connection outputs.
         fixed: Whether the output is constrained to equal its forecast (no curtailment).
@@ -53,7 +57,8 @@ class OutputData:
     _: KW_ONLY
     advanced: bool = False
     state_last: bool = False
-    state: float | None = None
+    state: float | datetime | None = None
+    available: bool = True
     priority: int | None = None
     fixed: bool = False
     display_precision: int | None = None

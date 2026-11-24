@@ -35,6 +35,7 @@ def test_outputs(case: OutputsCase) -> None:
         model_outputs=case["model_outputs"],
         config=data,
         periods=case["periods"],
+        forecast_times=case.get("forecast_times"),
     )
 
     assert result == case["outputs"]

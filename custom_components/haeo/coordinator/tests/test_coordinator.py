@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from homeassistant.config_entries import ConfigSubentry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
+from homeassistant.util import dt as dt_util
 import numpy as np
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -274,6 +275,8 @@ def test_load_from_input_stores_delegates_to_config_loader(
     assert call_args.args[0] == "Test Battery"
     # The field_values mapping passed to the loader carries the store's value.
     assert call_args.args[2] == {field_path: 42.0}
+    # Window hours are read in the home's zone, not UTC.
+    assert call_args.kwargs["time_zone"] == dt_util.get_default_time_zone()
     assert result == {"Test Battery": loaded_config}
 
 

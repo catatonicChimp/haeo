@@ -6,6 +6,7 @@ from enum import StrEnum
 class ElementType(StrEnum):
     """Element type identifiers for HAEO integration."""
 
+    APPLIANCE = "appliance"
     BATTERY = "battery"
     BATTERY_SECTION = "battery_section"
     BUFFER = "buffer"

@@ -101,6 +101,44 @@
     }
   },
   "config_subentries": {
+    "appliance": {
+      "flow_title": "Appliance",
+      "entry_type": "Appliance",
+      "initiate_flow": { "user": "Appliance", "reconfigure": "Appliance" },
+      "step": {
+        "user": {
+          "title": "Appliance configuration",
+          "description": "Configure a load that runs once inside its allowed hours when a switch arms it",
+          "data": { "connection": "Connection", "name": "Appliance name" },
+          "sections": {
+            "schedule": {
+              "data": { "armed": "Armed", "duration": "Run duration (hours)", "energy": "Energy per run (kWh)" },
+              "name": "Run"
+            },
+            "window": {
+              "data": {
+                "earliest_start": "Earliest start (hour of day)",
+                "latest_finish": "Latest finish (hour of day)"
+              },
+              "name": "Allowed hours"
+            }
+          }
+        },
+        "states": {
+          "title": "On and off states",
+          "description": "{entities} report words rather than on or off. Choose which states mean on, such as plugged in, and which mean off. Leave one list empty to count every other state as the opposite.",
+          "data": { "off_states": "States meaning off", "on_states": "States meaning on" }
+        }
+      },
+      "error": {
+        "invalid_endpoint": "This element applies its own prices, forecasts, and limits on its own connection, so it cannot be connected to directly. Choose the element it is connected to instead.",
+        "missing_name": "Name is required",
+        "name_exists": "A device with this name already exists",
+        "required": "Choose an entity or enter a value for every required field in this section",
+        "states_required": "Choose at least one state"
+      },
+      "abort": { "reconfigure_successful": "Configuration updated successfully" }
+    },
     "battery": {
       "flow_title": "Battery",
       "entry_type": "Battery",
@@ -660,6 +698,7 @@
     "switchboard_node_name": "Switchboard"
   },
   "device": {
+    "appliance": { "name": "{name}" },
     "battery": { "name": "{name}" },
     "battery_section": { "name": "{name}" },
     "buffer": { "name": "{name}" },
@@ -680,6 +719,10 @@
   },
   "entity": {
     "number": {
+      "appliance_duration": { "name": "Run duration" },
+      "appliance_earliest_start": { "name": "Earliest start" },
+      "appliance_energy": { "name": "Energy per run" },
+      "appliance_latest_finish": { "name": "Latest finish" },
       "battery_capacity": { "name": "Capacity" },
       "battery_charge_cost": { "name": "Charge cost" },
       "battery_charge_limit_cost": { "name": "Limit cost" },
@@ -751,6 +794,8 @@
       "thermal_store_target_temperature": { "name": "Readiness temperature" }
     },
     "sensor": {
+      "appliance_planned_start": { "name": "Planned start" },
+      "appliance_power": { "name": "Planned power" },
       "battery_energy_in_flow": { "name": "Energy in flow shadow price" },
       "battery_energy_out_flow": { "name": "Energy out flow shadow price" },
       "battery_energy_stored": { "name": "Energy stored" },
@@ -832,6 +877,7 @@
       "thermal_store_temperature": { "name": "Predicted tank temperature" }
     },
     "switch": {
+      "appliance_armed": { "name": "Armed" },
       "deferrable_load_in_window": { "name": "Run window" },
       "deferrable_load_window_start": { "name": "Window start" },
       "ev_away": { "name": "Away" },

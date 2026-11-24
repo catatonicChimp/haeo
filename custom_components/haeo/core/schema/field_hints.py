@@ -148,6 +148,29 @@ class SectionHints:
 
 
 @dataclass(frozen=True, slots=True)
+class WindowHint:
+    """Derive a per-period window mask from two hour-of-day fields of a section.
+
+    The two hour fields are constants the user configures; the mask is not an
+    input. It is written into the loaded config, one value per horizon period,
+    so a model element can zero its power outside the allowed hours.
+
+    Attributes:
+        earliest: Field name of the earliest hour the window may start at,
+            as an hour of the day from 0 to 24.
+        latest: Field name of the latest hour the window must finish by, as an
+            hour of the day from 0 to 24. A value below ``earliest`` wraps
+            overnight, and equal bounds cover the whole day.
+        target: Field name that receives the derived mask.
+
+    """
+
+    earliest: str
+    latest: str
+    target: str
+
+
+@dataclass(frozen=True, slots=True)
 class ListFieldHints:
     """Wrapper for field hints within items of a list config field.
 
@@ -189,6 +212,28 @@ def extract_field_hints(schema_cls: type) -> dict[str, dict[str, FieldHint]]:
             for arg in get_args(unwrapped_type)[1:]:
                 if isinstance(arg, SectionHints):
                     result[section_key] = arg.fields
+                    break
+
+    return result
+
+
+def extract_window_hints(schema_cls: type) -> dict[str, WindowHint]:
+    """Extract the window hints of a TypedDict's sections, keyed by section name."""
+    hints = get_type_hints(schema_cls, include_extras=True)
+    result: dict[str, WindowHint] = {}
+
+    for section_key, section_type in hints.items():
+        origin = get_origin(section_type)
+        if origin in (Required, NotRequired):
+            unwrapped_type = get_args(section_type)[0]
+            origin = get_origin(unwrapped_type)
+        else:
+            unwrapped_type = section_type
+
+        if origin is Annotated:
+            for arg in get_args(unwrapped_type)[1:]:
+                if isinstance(arg, WindowHint):
+                    result[section_key] = arg
                     break
 
     return result

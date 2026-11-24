@@ -58,9 +58,9 @@ async def async_system_health_info(hass: HomeAssistant) -> dict[str, JsonValueTy
         cost_output = network_outputs.get(OUTPUT_NAME_OPTIMIZATION_COST)
         duration_output = network_outputs.get(OUTPUT_NAME_OPTIMIZATION_DURATION)
 
-        if cost_output and cost_output.state is not None:
+        if cost_output and isinstance(cost_output.state, int | float):
             health_info[f"{prefix}last_optimization_cost"] = f"{float(cost_output.state):.2f}"
-        if duration_output and duration_output.state is not None:
+        if duration_output and isinstance(duration_output.state, int | float):
             health_info[f"{prefix}last_optimization_duration"] = round(float(duration_output.state), 3)
 
         if coordinator.data:

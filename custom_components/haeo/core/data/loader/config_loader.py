@@ -7,9 +7,11 @@ forecast fusion, and unit conversion -- all without HA dependencies.
 """
 
 from collections.abc import Collection, Mapping, Sequence
+from datetime import UTC, datetime, tzinfo
 from typing import NamedTuple
 
 import numpy as np
+from numpy.typing import NDArray
 
 from custom_components.haeo.core.adapters.registry import is_element_type
 from custom_components.haeo.core.const import CONF_ELEMENT_TYPE, CONF_NAME
@@ -20,11 +22,13 @@ from custom_components.haeo.core.model.const import OutputType
 from custom_components.haeo.core.schema import SchemaValue, as_constant_value, as_entity_value, is_schema_value
 from custom_components.haeo.core.schema.constant_value import is_constant_value
 from custom_components.haeo.core.schema.elements import ELEMENT_CONFIG_SCHEMAS, ElementConfigData, ElementConfigSchema
+from custom_components.haeo.core.schema.elements.element_type import ElementType
 from custom_components.haeo.core.schema.entity_value import is_entity_value
 from custom_components.haeo.core.schema.field_hints import (
     FieldHint,
     extract_field_hints,
     extract_list_field_hints,
+    extract_window_hints,
     field_inputs,
 )
 from custom_components.haeo.core.schema.none_value import is_none_value
@@ -134,6 +138,7 @@ def load_element_config(
     forecast_times: Sequence[float],
     *,
     negated_paths: Collection[InputPath] = frozenset(),
+    time_zone: tzinfo | None = None,
 ) -> ElementConfigData:
     """Load a single element's config by resolving its inputs against a state machine.
 
@@ -148,6 +153,8 @@ def load_element_config(
         forecast_times: Boundary timestamps (n+1 values defining n intervals)
         negated_paths: Input paths whose entity-driven values are negated, as
             returned by ``negated_price_paths`` for this element
+        time_zone: Zone the window hours are read in, homeassistant's local zone
+            at runtime and UTC when absent
 
     Returns:
         Loaded configuration with resolved time series and scalar values.
@@ -176,13 +183,17 @@ def load_element_config(
     if unavailable:
         raise InputsUnavailableError(element_name, unavailable)
 
-    return load_element_config_from_values(element_name, element_config, field_values, forecast_times)
+    return load_element_config_from_values(
+        element_name, element_config, field_values, forecast_times, time_zone=time_zone
+    )
 
 
 def load_element_configs(
     participants: Mapping[str, ElementConfigSchema],
     sm: StateMachine,
     forecast_times: Sequence[float],
+    *,
+    time_zone: tzinfo | None = None,
 ) -> dict[str, ElementConfigData]:
     """Load all element configs by resolving values against a state machine.
 
@@ -193,6 +204,8 @@ def load_element_configs(
         participants: Map of element name to raw config dict
         sm: State machine providing entity states
         forecast_times: Boundary timestamps (n+1 values defining n intervals)
+        time_zone: Zone the window hours are read in, homeassistant's local zone
+            at runtime and UTC when absent
 
     Returns:
         Map of element name to loaded configuration.
@@ -200,9 +213,74 @@ def load_element_configs(
     """
     negated = negated_price_paths(participants)
     return {
-        name: load_element_config(name, config, sm, forecast_times, negated_paths=negated.get(name, frozenset()))
+        name: load_element_config(
+            name,
+            config,
+            sm,
+            forecast_times,
+            negated_paths=negated.get(name, frozenset()),
+            time_zone=time_zone,
+        )
         for name, config in participants.items()
     }
+
+
+def _local_hours(forecast_times: Sequence[float], time_zone: tzinfo) -> NDArray[np.float64]:
+    """Return the local hour of the day at which each horizon period starts."""
+    return np.asarray(
+        [
+            moment.hour + moment.minute / 60.0 + moment.second / 3600.0 + moment.microsecond / 3_600_000_000.0
+            for moment in (datetime.fromtimestamp(start, tz=time_zone) for start in forecast_times[:-1])
+        ],
+        dtype=np.float64,
+    )
+
+
+def _hour_of_day(value: object) -> float | None:
+    """Return a section's hour-of-day value, or None when it is absent or not a number."""
+    if isinstance(value, bool) or not isinstance(value, int | float | np.integer | np.floating):
+        return None
+    return float(value)
+
+
+def _window_mask(
+    forecast_times: Sequence[float],
+    earliest: float | None,
+    latest: float | None,
+    *,
+    time_zone: tzinfo,
+) -> NDArray[np.float64]:
+    """Return 1 for each period that starts inside the allowed hours, 0 for the rest.
+
+    A period belongs to the window by its start hour. An absent bound leaves the
+    window open on that side, so both absent allows every period. A window that
+    starts at a later hour than it finishes wraps overnight, and equal bounds
+    cover the whole day.
+    """
+    count = max(len(forecast_times) - 1, 0)
+    if earliest is None or latest is None:
+        return np.ones(count)
+    start = earliest % 24.0
+    finish = latest % 24.0
+    if start == finish:
+        return np.ones(count)
+    hours = _local_hours(forecast_times, time_zone)
+    inside = (hours >= start) & (hours < finish) if start < finish else (hours >= start) | (hours < finish)
+    return inside.astype(np.float64)
+
+
+def _apply_window_hints(
+    loaded: dict[str, object], element_type: ElementType, forecast_times: Sequence[float], *, time_zone: tzinfo
+) -> None:
+    """Write each section's derived window mask into the loaded config."""
+    for section_name, window in extract_window_hints(ELEMENT_CONFIG_SCHEMAS[element_type]).items():
+        section = _section_dict(loaded, section_name)
+        section[window.target] = _window_mask(
+            forecast_times,
+            _hour_of_day(section.get(window.earliest)),
+            _hour_of_day(section.get(window.latest)),
+            time_zone=time_zone,
+        )
 
 
 def load_element_config_from_values(
@@ -210,6 +288,8 @@ def load_element_config_from_values(
     element_config: ElementConfigSchema,
     field_values: Mapping[tuple[str, ...], bool | float | np.ndarray | None],
     forecast_times: Sequence[float],
+    *,
+    time_zone: tzinfo | None = None,
 ) -> ElementConfigData:
     """Assemble an element's loaded config from pre-resolved input field values.
 
@@ -225,6 +305,8 @@ def load_element_config_from_values(
         element_config: Raw element config dict (sectioned format).
         field_values: Map of field path to its resolved value.
         forecast_times: Boundary timestamps (used only for type-driven defaults).
+        time_zone: Zone the window hours are read in, homeassistant's local zone
+            at runtime and UTC when absent.
 
     Returns:
         Loaded configuration with resolved time series and scalar values.
@@ -268,6 +350,8 @@ def load_element_config_from_values(
                     loaded_section = loaded.get(section_name)
                     if isinstance(loaded_section, dict):
                         loaded_section.pop(input_name, None)
+
+    _apply_window_hints(loaded, element_type, forecast_times, time_zone=time_zone or UTC)
 
     list_hints = extract_list_field_hints(ELEMENT_CONFIG_SCHEMAS[element_type])
     for list_key, hints in list_hints.items():

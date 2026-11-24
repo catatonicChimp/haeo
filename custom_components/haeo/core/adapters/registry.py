@@ -8,6 +8,7 @@ from typing import (
     runtime_checkable,
 )
 
+from custom_components.haeo.core.adapters.elements.appliance import adapter as appliance_adapter
 from custom_components.haeo.core.adapters.elements.battery import adapter as battery_adapter
 from custom_components.haeo.core.adapters.elements.battery_section import adapter as battery_section_adapter
 from custom_components.haeo.core.adapters.elements.buffer import adapter as buffer_adapter
@@ -111,6 +112,7 @@ class ConfiguredRolesAdapter(Protocol):
 
 
 ELEMENT_TYPES: dict[ElementType, ElementAdapter] = {
+    ElementType.APPLIANCE: appliance_adapter,
     ElementType.GRID: grid_adapter,
     ElementType.LOAD: load_adapter,
     ElementType.INVERTER: inverter_adapter,
