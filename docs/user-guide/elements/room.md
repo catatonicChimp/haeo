@@ -9,9 +9,9 @@ Any number of rooms can reference one HVAC element without duplicating electrica
 - Connection: the whole-house HVAC appliance this room responds to.
 - Measured temperature: the room sensor used as the initial state.
 - Outdoor temperature: an ambient forecast or observation.
-  A current observation is a persistence assumption, not a weather forecast.
+    A current observation is a persistence assumption, not a weather forecast.
 - Comfort minimum and maximum: boundaries in degrees Celsius.
-  These may be constants or forecast sensors carrying day, night or presence policy.
+    These may be constants or forecast sensors carrying day, night or presence policy.
 - Heat loss rate: first-order loss in 1/h.
 - HVAC response: temperature change in K per electrical kWh delivered to the shared appliance.
 - Comfort price: cost per Kelvin-hour outside the band.
@@ -36,7 +36,7 @@ The model does not include solar gains, internal gains, humidity, door state, ai
 
 <div class="grid cards" markdown>
 
--   **Shared appliance**
+- **Shared appliance**
 
     ---
 

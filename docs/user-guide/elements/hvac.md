@@ -8,7 +8,7 @@ Rooms attach to the HVAC element and cannot create separate electrical loads or 
 
 - Connection: the switchboard or bus that supplies the appliance.
 - Operating mode: a numeric input where 1 means heating, -1 cooling and 0 off.
-  Use a template helper derived from your climate policy when no numeric mode already exists.
+    Use a template helper derived from your climate policy when no numeric mode already exists.
 - Maximum electrical power: the appliance's verified maximum input, in kW.
 
 Mode is a single value for the whole optimization horizon.
@@ -33,7 +33,7 @@ Room inputs and their interpretation are described in [Room](room.md).
 
 <div class="grid cards" markdown>
 
--   :material-home-thermometer:{ .lg .middle } **Configure rooms**
+- :material-home-thermometer:{ .lg .middle } **Configure rooms**
 
     ---
 
@@ -41,7 +41,7 @@ Room inputs and their interpretation are described in [Room](room.md).
 
     [:material-arrow-right: Room setup](room.md)
 
--   **Thermal formulation**
+- **Thermal formulation**
 
     ---
 

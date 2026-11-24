@@ -9,9 +9,9 @@ consumes nothing and has no planned start.
 This is the continuous relaxation. Power may fill any allowed periods up to
 ``energy / duration``, so the optimization is free to spread the run across the
 window and the model stays a linear program. The adapter then commits the
-cheapest single contiguous block of the run length that the plan can cover,
-which is what an actuator can follow; this element only reports the relaxed
-power it was asked for.
+cheapest single contiguous block of the run length that the allowed hours can
+fit, which is what an actuator can follow; this element only reports the
+relaxed power it was asked for.
 
 Window hours are hours of the day. A window that starts later than it finishes
 runs overnight, and equal bounds cover the whole day. A period lies inside the

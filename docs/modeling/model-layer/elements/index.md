@@ -65,6 +65,14 @@ This separation keeps the Model Layer focused on optimization mathematics while 
 
     [:material-arrow-right: Battery model](battery.md)
 
+- :material-washing-machine:{ .lg .middle } **Appliance**
+
+    ---
+
+    One unbroken run inside its allowed hours.
+
+    [:material-arrow-right: Appliance model](appliance.md)
+
 - :material-timer-outline:{ .lg .middle } **Deferrable load**
 
     ---

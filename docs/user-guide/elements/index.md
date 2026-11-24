@@ -78,6 +78,12 @@ Explore detailed configuration for each element type:
 
     [:material-arrow-right: Battery guide](battery.md)
 
+- :material-washing-machine:{ .lg .middle } __Appliance configuration__
+
+    One unbroken run inside its allowed hours, armed by a switch.
+
+    [:material-arrow-right: Appliance guide](appliance.md)
+
 - :material-timer-outline:{ .lg .middle } __Deferrable load configuration__
 
     Scheduled loads that must absorb set energy within calendar windows.

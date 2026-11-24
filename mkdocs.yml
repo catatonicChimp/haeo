@@ -163,6 +163,7 @@ nav:
       - HAEO vs Alternatives: user-guide/alternatives.md
       - Elements:
           - user-guide/elements/index.md
+          - Appliance: user-guide/elements/appliance.md
           - Battery: user-guide/elements/battery.md
           - Battery Section: user-guide/elements/battery_section.md
           - Deferrable Load: user-guide/elements/deferrable_load.md
@@ -188,6 +189,7 @@ nav:
           - modeling/model-layer/index.md
           - Elements:
               - modeling/model-layer/elements/index.md
+              - Appliance: modeling/model-layer/elements/appliance.md
               - Battery: modeling/model-layer/elements/battery.md
               - Buffer: modeling/model-layer/elements/buffer.md
               - Deferrable load: modeling/model-layer/elements/deferrable_load.md
