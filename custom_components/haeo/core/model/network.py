@@ -21,6 +21,7 @@ from numpy.typing import NDArray
 
 from .element import Element, NetworkElement
 from .elements import ELEMENTS, ModelElementConfig
+from .elements.appliance import Appliance, ApplianceElementConfig
 from .elements.battery import Battery, BatteryElementConfig
 from .elements.buffer import Buffer, BufferElementConfig
 from .elements.connection import Connection, ConnectionElementConfig, ConnectionOutputName
@@ -246,6 +247,9 @@ class Network:
 
     @overload
     def add(self, element_config: DeferrableLoadElementConfig) -> DeferrableLoad: ...
+
+    @overload
+    def add(self, element_config: ApplianceElementConfig) -> Appliance: ...
 
     @overload
     def add(self, element_config: NodeElementConfig) -> Node: ...

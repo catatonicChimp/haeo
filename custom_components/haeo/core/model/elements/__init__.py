@@ -9,6 +9,12 @@ from typing import Final, Generic, Never, Protocol, TypeGuard, TypeVar
 
 from custom_components.haeo.core.model.element import Element, NetworkElement
 
+from .appliance import APPLIANCE_OUTPUT_NAMES as APPLIANCE_OUTPUT_NAMES
+from .appliance import ELEMENT_TYPE as MODEL_ELEMENT_TYPE_APPLIANCE
+from .appliance import Appliance as Appliance
+from .appliance import ApplianceElementConfig as ApplianceElementConfig
+from .appliance import ApplianceElementTypeName as ApplianceElementTypeName
+from .appliance import ApplianceOutputName as ApplianceOutputName
 from .battery import BATTERY_OUTPUT_NAMES as BATTERY_OUTPUT_NAMES
 from .battery import BATTERY_POWER_CONSTRAINTS as BATTERY_POWER_CONSTRAINTS
 from .battery import ELEMENT_TYPE as MODEL_ELEMENT_TYPE_BATTERY
@@ -80,6 +86,7 @@ ModelElementType = (
     | ThermalStoreElementTypeName
     | HvacElementTypeName
     | RoomElementTypeName
+    | ApplianceElementTypeName
 )
 
 # Typed configs for all model elements (discriminated by element_type)
@@ -93,11 +100,14 @@ ModelElementConfig = (
     | ThermalStoreElementConfig
     | HvacElementConfig
     | RoomElementConfig
+    | ApplianceElementConfig
 )
 
 # Configs of the elements that produce or consume power themselves, which
 # connections join and power balance applies to
-type NetworkElementConfig = BatteryElementConfig | NodeElementConfig | DeferrableLoadElementConfig
+type NetworkElementConfig = (
+    BatteryElementConfig | NodeElementConfig | DeferrableLoadElementConfig | ApplianceElementConfig
+)
 
 # Configs of the network elements that may produce power, which take outbound tags
 type SourceElementConfig = BatteryElementConfig | NodeElementConfig
@@ -169,6 +179,9 @@ ELEMENTS: Final[dict[ModelElementType, ElementSpec[Never]]] = {
     MODEL_ELEMENT_TYPE_DEFERRABLE_LOAD: ElementSpec[DeferrableLoadElementConfig](
         factory=DeferrableLoad, output_names=DEFERRABLE_LOAD_OUTPUT_NAMES, arguments=config_arguments
     ),
+    MODEL_ELEMENT_TYPE_APPLIANCE: ElementSpec[ApplianceElementConfig](
+        factory=Appliance, output_names=APPLIANCE_OUTPUT_NAMES, arguments=config_arguments
+    ),
     MODEL_ELEMENT_TYPE_NODE: ElementSpec[NodeElementConfig](
         factory=Node, output_names=NODE_OUTPUT_NAMES, arguments=config_arguments
     ),
@@ -195,6 +208,7 @@ def is_source_element_config(config: NetworkElementConfig) -> TypeGuard[SourceEl
 
 
 __all__ = [
+    "APPLIANCE_OUTPUT_NAMES",
     "BATTERY_OUTPUT_NAMES",
     "BATTERY_POWER_CONSTRAINTS",
     "BUFFER_OUTPUT_NAMES",
@@ -202,12 +216,16 @@ __all__ = [
     "CONNECTION_POWER",
     "DEFERRABLE_LOAD_OUTPUT_NAMES",
     "ELEMENTS",
+    "MODEL_ELEMENT_TYPE_APPLIANCE",
     "MODEL_ELEMENT_TYPE_BATTERY",
     "MODEL_ELEMENT_TYPE_BUFFER",
     "MODEL_ELEMENT_TYPE_CONNECTION",
     "MODEL_ELEMENT_TYPE_DEFERRABLE_LOAD",
     "MODEL_ELEMENT_TYPE_NODE",
     "MODEL_ELEMENT_TYPE_POLICY_PRICING",
+    "Appliance",
+    "ApplianceElementConfig",
+    "ApplianceOutputName",
     "Battery",
     "BatteryConstraintName",
     "BatteryElementConfig",
