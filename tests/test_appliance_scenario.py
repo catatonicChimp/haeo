@@ -6,14 +6,18 @@ one contiguous block of the configured length, in the cheapest periods the
 allowed hours leave available.
 """
 
+from collections.abc import Mapping
 from datetime import UTC, datetime
 
 import numpy as np
 import pytest
 
-from custom_components.haeo.core.adapters.elements.appliance import adapter
+from custom_components.haeo.coordinator.coordinator import commit_appliance_runs
+from custom_components.haeo.core.adapters.elements.appliance import RunPlan, adapter
+from custom_components.haeo.core.adapters.elements.grid import adapter as grid_adapter
 from custom_components.haeo.core.adapters.network_builder import build_network
 from custom_components.haeo.core.data.loader.config_loader import load_element_config_from_values
+from custom_components.haeo.core.model import ModelOutputName, Network, OutputData
 from custom_components.haeo.core.schema import as_connection_target
 from custom_components.haeo.core.schema.elements import ElementConfigData, ElementType
 from custom_components.haeo.core.schema.elements.appliance import ApplianceConfigData
@@ -33,6 +37,7 @@ def _appliance(
     energy: float = 1.0,
     duration: float = 1.0,
     armed: bool = True,
+    max_import: list[float] | None = None,
 ) -> tuple[dict[str, ElementConfigData], ApplianceConfigData]:
     """Build a switchboard, a priced grid, and an appliance connected to the switchboard."""
     periods = len(prices)
@@ -54,7 +59,7 @@ def _appliance(
             "name": "Grid",
             "connection": as_connection_target("Switchboard"),
             "pricing": {"price_source_target": np.asarray(prices), "price_target_source": np.zeros(periods)},
-            "power_limits": {},
+            "power_limits": ({"max_power_source_target": np.asarray(max_import)} if max_import is not None else {}),
         },
         # A steady base load keeps the switchboard importing, so its power-balance
         # shadow price is the grid's import price in each period.
@@ -185,3 +190,122 @@ def test_equal_bounds_cover_the_whole_day() -> None:
 def test_full_day_window_ending_at_24_hours_keeps_every_period() -> None:
     """The default 0 to 24 window does not wrap, and still lets a run start late at night."""
     assert _window_mask(0.0, 24.0, [0, 12, 23]) == [1.0, 1.0, 1.0]
+
+
+async def _two_phase(
+    participants: dict[str, ElementConfigData],
+    period_count: int,
+) -> tuple[
+    Network,
+    Mapping[str, Mapping[ModelOutputName, OutputData]],
+    Mapping[str, Mapping[ModelOutputName, OutputData]],
+    dict[str, RunPlan],
+    int,
+]:
+    """Solve the relaxed network once, commit its runs, and count the phase-two solves."""
+    network = build_network("shadow", participants, [PERIOD_SECONDS] * period_count)
+    cost = network.optimize()
+    relaxed = {name: element.outputs() for name, element in network.elements.items()}
+    phase_two_solves = 0
+
+    async def run_optimize() -> float:
+        nonlocal phase_two_solves
+        phase_two_solves += 1
+        return network.optimize()
+
+    outputs, _cost, committed = await commit_appliance_runs(network, participants, relaxed, cost, run_optimize)
+    return network, relaxed, outputs, committed, phase_two_solves
+
+
+def _planned_run(
+    network: Network,
+    participants: dict[str, ElementConfigData],
+    appliance: ApplianceConfigData,
+    outputs: Mapping[str, Mapping[ModelOutputName, OutputData]],
+    plan: RunPlan,
+) -> tuple[tuple[float, ...], tuple[float, ...]]:
+    """Return the appliance's planned power and the grid's import, from the outputs of a solve."""
+    device = adapter.outputs(
+        "Dishwasher",
+        outputs,
+        config=appliance,
+        periods=tuple(float(period) for period in network.periods),
+        forecast_times=_forecast_times(len(plan.power)),
+        committed=plan,
+    )[ElementType.APPLIANCE]
+    grid = grid_adapter.outputs(
+        "Grid",
+        outputs,
+        config=participants["Grid"],  # type: ignore[arg-type]  # the fixture builds a complete grid config
+        periods=network.periods,
+    )[ElementType.GRID]
+    return device["appliance_power"].values, grid["grid_power_import"].values
+
+
+async def test_committed_run_skips_a_block_the_network_cannot_supply() -> None:
+    """The relaxed run is feasible, but the cheapest block overdraws one period."""
+    participants, _appliance_config = _appliance(prices=[0.1, 0.1, 0.1], max_import=[1.5, 100.0, 100.0])
+
+    _network, relaxed, _outputs, committed, phase_two_solves = await _two_phase(participants, 3)
+
+    # The relaxed plan spreads the run under the cap, so one solve finds it
+    relaxed_power = relaxed["Dishwasher"]["appliance_power"].values
+    assert sum(relaxed_power) == pytest.approx(1.0)
+    assert relaxed_power[0] <= 0.5 + 1e-6
+    # The earliest block draws the base load plus the whole run in the capped period,
+    # so it fails and the next block is solved instead
+    assert phase_two_solves == 2
+    plan = committed["Dishwasher"]
+    assert plan.start == 1
+    assert plan.power == pytest.approx((0.0, 1.0, 0.0))
+
+
+async def test_committed_run_matches_the_solved_plan() -> None:
+    """The published outputs follow the pinned solve, so import rises where the block runs."""
+    participants, appliance = _appliance(prices=[0.1, 0.1, 0.1], max_import=[1.5, 100.0, 100.0])
+
+    network, _relaxed, outputs, committed, _solves = await _two_phase(participants, 3)
+    planned_power, import_power = _planned_run(network, participants, appliance, outputs, committed["Dishwasher"])
+
+    assert planned_power == pytest.approx((0.0, 1.0, 0.0))
+    # One kW of base load everywhere, plus the run only in the period it is committed to
+    assert import_power == pytest.approx((1.0, 2.0, 1.0))
+
+
+async def test_disarmed_appliance_solves_once() -> None:
+    """A disarmed appliance needs no committed block, so only the relaxed solve runs."""
+    participants, _appliance_config = _appliance(prices=[0.1, 0.1, 0.1], armed=False)
+
+    _network, relaxed, outputs, committed, phase_two_solves = await _two_phase(participants, 3)
+
+    assert phase_two_solves == 0
+    assert committed == {}
+    assert outputs is relaxed
+
+
+async def test_no_supplyable_block_falls_back_to_the_relaxed_plan() -> None:
+    """When every block overdraws the supply, the relaxed plan stands and the run is reported off."""
+    participants, appliance = _appliance(prices=[0.1, 0.1, 0.1], max_import=[2.5, 2.5, 2.5])
+    participants["Base"]["forecast"]["forecast"] = np.full(3, 2.0)  # type: ignore[index]  # the fixture's load config
+
+    network, relaxed, outputs, committed, phase_two_solves = await _two_phase(participants, 3)
+
+    # The relaxed run spreads half a kW into two periods, which the cap still allows
+    assert sum(relaxed["Dishwasher"]["appliance_power"].values) == pytest.approx(1.0)
+    # Every one of the three blocks would draw 3 kW, over the 2.5 kW cap
+    assert phase_two_solves == 3
+    assert outputs is relaxed
+    plan = committed["Dishwasher"]
+    assert plan.start is None
+    assert plan.power == pytest.approx((0.0, 0.0, 0.0))
+
+    device = adapter.outputs(
+        "Dishwasher",
+        outputs,
+        config=appliance,
+        periods=tuple(float(period) for period in network.periods),
+        forecast_times=_forecast_times(3),
+        committed=plan,
+    )[ElementType.APPLIANCE]
+    assert device["appliance_power"].values == pytest.approx((0.0, 0.0, 0.0))
+    assert device["appliance_planned_start"].available is False

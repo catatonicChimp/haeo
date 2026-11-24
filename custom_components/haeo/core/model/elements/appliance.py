@@ -8,10 +8,11 @@ consumes nothing and has no planned start.
 
 This is the continuous relaxation. Power may fill any allowed periods up to
 ``energy / duration``, so the optimization is free to spread the run across the
-window and the model stays a linear program. The adapter then commits the
-cheapest single contiguous block of the run length that the allowed hours can
-fit, which is what an actuator can follow; this element only reports the
-relaxed power it was asked for.
+window and the model stays a linear program. The adapter commits the cheapest
+single contiguous block of the run length that the allowed hours can fit, which
+is what an actuator can follow, and the coordinator pins that block on this
+element and solves again so every other output agrees with it. A pin can be
+released, and clearing it returns the element to the relaxation.
 
 Window hours are hours of the day. A window that starts later than it finishes
 runs overnight, and equal bounds cover the whole day. A period lies inside the
@@ -84,12 +85,18 @@ class Appliance(NetworkElement[ApplianceOutputName]):
     Power is never negative and is zero outside the window and while disarmed.
     The energy of the whole horizon plus any shortfall equals the run's energy,
     so the run fits the window or the shortfall reports how much of it does not.
+
+    ``pinned_power`` is a committed run's power in each period, set by the
+    coordinator after it chooses a block an actuator can follow. While it is
+    set the run's power is fixed to it, so a solve describes the committed
+    schedule; setting it to None frees the power and returns to the relaxation.
     """
 
     in_window: TrackedParam[NDArray[np.float64]] = TrackedParam()
     energy: TrackedParam[float] = TrackedParam()
     duration: TrackedParam[float] = TrackedParam()
     armed: TrackedParam[bool] = TrackedParam()
+    pinned_power: TrackedParam[NDArray[np.float64] | None] = TrackedParam()
 
     def __init__(
         self,
@@ -133,6 +140,7 @@ class Appliance(NetworkElement[ApplianceOutputName]):
         self.energy = energy
         self.duration = duration
         self.armed = armed
+        self.pinned_power = None
 
         # Power drawn from the network in each period, bounded by the constraints below
         self.power = solver.add_variables(self.n_periods, name=f"{name}.power")
@@ -156,6 +164,14 @@ class Appliance(NetworkElement[ApplianceOutputName]):
         return self.power <= self.max_power() * available
 
     @constraint
+    def appliance_pinned_run(self) -> Rows:
+        """Constraint: the run's power is fixed to the committed block while a block is pinned."""
+        pinned = self.pinned_power
+        if pinned is None:
+            return self.power.free()
+        return self.power == pinned
+
+    @constraint
     def appliance_energy(self) -> Rows:
         """Constraint: the run's energy is delivered inside the horizon, or reported as shortfall."""
         return (self.power * self.periods).total() + self.shortfall.total() == self.required_energy()
@@ -175,5 +191,5 @@ class Appliance(NetworkElement[ApplianceOutputName]):
 
     @output
     def appliance_power(self) -> OutputData:
-        """Output: relaxed power the appliance draws in each period."""
+        """Output: power the appliance draws in each period, relaxed until a run is pinned."""
         return OutputData(type=OutputType.POWER, unit="kW", values=self.extract_values(self.power), direction="-")

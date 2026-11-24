@@ -1,6 +1,7 @@
 """Appliance element adapter for the relaxed plan and the run an actuator follows."""
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Final, Literal
 
@@ -47,6 +48,17 @@ _FIT_EPSILON: Final = 1e-9
 _WINDOW_OPEN: Final = 0.5
 
 
+@dataclass(frozen=True, slots=True)
+class RunPlan:
+    """One block of the run's length that an actuator could execute."""
+
+    power: tuple[float, ...]
+    """Per-period power of the block, zero outside it."""
+
+    start: int | None
+    """Index of the period the block starts in, or None when there is no block."""
+
+
 class ApplianceAdapter:
     """Adapter for appliance elements."""
 
@@ -64,7 +76,8 @@ class ApplianceAdapter:
 
         The model plans a relaxed run: power may fill any allowed period up to
         the run's energy over its duration. Which single contiguous block of
-        that length actually runs is decided from the plan in ``outputs``.
+        that length actually runs is decided from the plan, then pinned on the
+        element by the coordinator so a second solve describes it.
         """
         name = config["name"]
         schedule = config[SECTION_SCHEDULE]
@@ -88,6 +101,36 @@ class ApplianceAdapter:
             },
         ]
 
+    def run_candidates(
+        self,
+        model_outputs: Mapping[str, Mapping[ModelOutputName, ModelOutputValue]],
+        *,
+        config: ApplianceConfigData,
+        periods: Sequence[float] = (),
+        **_kwargs: object,
+    ) -> tuple[RunPlan, ...]:
+        """Return every block an actuator could run, cheapest first.
+
+        The coordinator pins each of these in turn and re-solves, so a block
+        whose supply the network cannot deliver is skipped in favour of the
+        next cheapest one. Each candidate is priced from the relaxed solve's
+        node power-balance shadow price, as ``outputs`` describes. A disarmed
+        appliance has no candidates.
+        """
+        schedule = config[SECTION_SCHEDULE]
+        if not bool(schedule[CONF_ARMED]):
+            return ()
+        window = config[SECTION_WINDOW]
+        count = len(window[CONF_IN_WINDOW])
+        blocks = _fitting_blocks(
+            in_window=tuple(float(value) for value in window[CONF_IN_WINDOW]),
+            prices=_node_price(model_outputs, config, count),
+            widths=_period_widths(periods, count),
+            energy=float(schedule[CONF_ENERGY]),
+            duration=float(schedule[CONF_DURATION]),
+        )
+        return tuple(RunPlan(power=power, start=start) for power, start, _cost in blocks)
+
     def outputs(
         self,
         name: str,
@@ -96,6 +139,7 @@ class ApplianceAdapter:
         config: ApplianceConfigData,
         periods: Sequence[float] = (),
         forecast_times: Sequence[datetime] | None = None,
+        committed: RunPlan | None = None,
         **_kwargs: object,
     ) -> Mapping[ApplianceDeviceName, Mapping[ApplianceElementOutputName, OutputData]]:
         """Expose the committed run as planned power and its start.
@@ -103,9 +147,9 @@ class ApplianceAdapter:
         The optimization is a continuous relaxation and may spread the run
         across the window. An actuator can only run one uninterrupted block of
         the configured length, so the block that runs is chosen here: each
-        candidate start is the earliest period boundary whose block of the
-        configured length stays inside the allowed hours, and the cheapest one
-        wins, with the earliest breaking ties.
+        candidate start is a period boundary whose block of the configured
+        length stays inside the allowed hours, and the cheapest one wins, with
+        the earliest breaking ties.
 
         Cost is the per-period energy of the block times the configured node's
         power-balance shadow price. That price is the marginal value of one
@@ -115,6 +159,11 @@ class ApplianceAdapter:
         already in $/kWh. When the node reports no price, such as an unpriced
         node, every candidate costs the same and the earliest that fits wins,
         which is the same placement as a zero import-minus-export price.
+
+        ``committed`` is the block the coordinator already chose and pinned
+        into the solve these outputs come from, so the planned power agrees
+        with the rest of the published plan. Without it the cheapest block is
+        derived here, which is what a single solve can offer.
 
         A run that cannot fit its window, or is disarmed, commits no power and
         reports its start as unavailable.
@@ -126,21 +175,19 @@ class ApplianceAdapter:
         relaxed = expect_output_data(name_values.get(APPLIANCE_POWER))
         period_count = len(relaxed.values) if relaxed is not None else len(window[CONF_IN_WINDOW])
 
-        widths = tuple(float(width) for width in periods)
-        if len(widths) != period_count:
-            widths = (1.0,) * period_count
-
-        prices = _node_price(model_outputs, config, period_count)
-
-        armed = bool(schedule[CONF_ARMED])
-        energy = float(schedule[CONF_ENERGY]) if armed else 0.0
-        committed, start = _commit_run(
-            in_window=tuple(float(value) for value in window[CONF_IN_WINDOW]),
-            prices=prices,
-            widths=widths,
-            energy=energy,
-            duration=float(schedule[CONF_DURATION]),
-        )
+        if committed is None:
+            widths = _period_widths(periods, period_count)
+            armed = bool(schedule[CONF_ARMED])
+            energy = float(schedule[CONF_ENERGY]) if armed else 0.0
+            power, start = _commit_run(
+                in_window=tuple(float(value) for value in window[CONF_IN_WINDOW]),
+                prices=_node_price(model_outputs, config, period_count),
+                widths=widths,
+                energy=energy,
+                duration=float(schedule[CONF_DURATION]),
+            )
+        else:
+            power, start = committed.power, committed.start
 
         start_at: datetime | None = None
         if start is not None and forecast_times is not None and start < len(forecast_times):
@@ -151,7 +198,7 @@ class ApplianceAdapter:
                 APPLIANCE_POWER: OutputData(
                     type=OutputType.POWER,
                     unit="kW",
-                    values=committed,
+                    values=power,
                     direction="-",
                 ),
                 APPLIANCE_PLANNED_START: OutputData(
@@ -179,24 +226,33 @@ def _node_price(
     return prices if len(prices) == period_count else (0.0,) * period_count
 
 
-def _commit_run(
+def _period_widths(periods: Sequence[float], count: int) -> tuple[float, ...]:
+    """Return one width in hours per period, falling back to one-hour periods when they do not line up."""
+    widths = tuple(float(width) for width in periods)
+    if len(widths) != count:
+        return (1.0,) * count
+    return widths
+
+
+def _fitting_blocks(
     *,
     in_window: Sequence[float],
     prices: Sequence[float],
     widths: Sequence[float],
     energy: float,
     duration: float,
-) -> tuple[tuple[float, ...], int | None]:
-    """Return the committed per-period power and the start period of the cheapest fitting block."""
+) -> list[tuple[tuple[float, ...], int, float]]:
+    """Return every block that fits, as its per-period power, its start, and its cost, cheapest first.
+
+    A tie in cost goes to the earlier start, so the first block of the list is
+    the one to run when the network can supply any of them.
+    """
     count = len(widths)
     if energy <= 0.0 or duration <= 0.0 or count == 0:
-        return (0.0,) * count, None
+        return []
 
     power = energy / duration
-    best_cost: float | None = None
-    best_start: int | None = None
-    best_fractions: tuple[float, ...] = (0.0,) * count
-
+    blocks: list[tuple[float, int, tuple[float, ...]]] = []
     for start in range(count):
         remaining = duration
         fractions = [0.0] * count
@@ -213,14 +269,26 @@ def _commit_run(
             index += 1
         if remaining > _FIT_EPSILON:
             continue
-        if best_cost is None or cost < best_cost - _FIT_EPSILON:
-            best_cost = cost
-            best_start = start
-            best_fractions = tuple(fractions)
+        blocks.append((cost, start, tuple(power * fraction for fraction in fractions)))
 
-    if best_start is None:
-        return (0.0,) * count, None
-    return tuple(power * fraction for fraction in best_fractions), best_start
+    blocks.sort(key=lambda block: (block[0], block[1]))
+    return [(fractions, start, cost) for cost, start, fractions in blocks]
+
+
+def _commit_run(
+    *,
+    in_window: Sequence[float],
+    prices: Sequence[float],
+    widths: Sequence[float],
+    energy: float,
+    duration: float,
+) -> tuple[tuple[float, ...], int | None]:
+    """Return the committed per-period power and the start period of the cheapest fitting block."""
+    blocks = _fitting_blocks(in_window=in_window, prices=prices, widths=widths, energy=energy, duration=duration)
+    if not blocks:
+        return (0.0,) * len(widths), None
+    power, start, _cost = blocks[0]
+    return power, start
 
 
 adapter = ApplianceAdapter()

@@ -66,7 +66,8 @@ The defaults of `0` and `24` allow the whole day.
 - **Overnight window**: when the latest finish is earlier than the earliest start, such as `20` to `6`, the window wraps past midnight.
 - **Equal bounds**: an earliest start equal to the latest finish allows the whole day, so `0` to `0` means any time.
 
-A run must fit entirely inside the window and entirely inside the planning horizon.
+A run's periods must all start inside the window and inside the planning horizon.
+The last period may run past the latest-finish hour, because the window is read from each period's start hour.
 A window shorter than the run duration leaves no room for the block, so the planned start reads unavailable and the power stays at zero.
 
 ## How the run is chosen
@@ -75,9 +76,10 @@ The optimizer plans a continuous relaxation: power may fill any allowed period, 
 That keeps the problem a linear program with no on/off decisions.
 The element then picks the single block of the configured length that a device could actually run:
 
-- Only starts whose whole block stays inside the allowed hours are considered.
+- Only starts whose every period begins inside the allowed hours are considered.
 - The block is priced at the connected endpoint's marginal price for each period it covers, which is the grid's import price while the endpoint draws from the grid and its export price while the endpoint exports.
 - The cheapest block wins, and the earliest start wins a tie.
+- The plan is solved again with that block fixed, so the rest of the plan matches the run. A block the network cannot supply is skipped for the next cheapest one.
 
 The planned power sensor reports only the committed block, so it steps from zero to the run's power and back to zero rather than following the relaxed plan.
 If the endpoint reports no marginal price, every block costs the same and the earliest one that fits is shown.

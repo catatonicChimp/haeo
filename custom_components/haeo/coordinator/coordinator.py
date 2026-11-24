@@ -1,7 +1,7 @@
 """Data update coordinator for the Home Assistant Energy Optimizer integration."""
 
 import asyncio
-from collections.abc import Callable, Collection, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 import logging
@@ -17,6 +17,7 @@ from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 from homeassistant.util.json import JsonValueType
+import numpy as np
 
 from custom_components.haeo.const import (
     DOMAIN,
@@ -29,13 +30,14 @@ from custom_components.haeo.const import (
     OUTPUT_NAME_OPTIMIZATION_DURATION,
     NetworkOutputName,
 )
+from custom_components.haeo.core.adapters.elements.appliance import RunPlan
 from custom_components.haeo.core.adapters.network_builder import (
     ElementUpdater,
     build_element_updaters,
     build_network,
     periods_in_hours,
 )
-from custom_components.haeo.core.adapters.registry import ELEMENT_TYPES
+from custom_components.haeo.core.adapters.registry import ELEMENT_TYPES, CommittedRunAdapter
 from custom_components.haeo.core.const import (
     CONF_DEBOUNCE_SECONDS,
     CONF_ELEMENT_TYPE,
@@ -48,9 +50,10 @@ from custom_components.haeo.core.context import OptimizationContext
 from custom_components.haeo.core.data.loader.config_loader import load_element_config_from_values
 from custom_components.haeo.core.data.loader.extractors.haeo import InterpolationMode
 from custom_components.haeo.core.model import ModelOutputName, Network, OutputData, OutputType, SolverError
+from custom_components.haeo.core.model.elements.appliance import Appliance
 from custom_components.haeo.core.model.infeasibility import InfeasibleError, RowLabel, listing
 from custom_components.haeo.core.model.topology import serialize_topology
-from custom_components.haeo.core.schema.elements import ElementConfigData, ElementConfigSchema
+from custom_components.haeo.core.schema.elements import ElementConfigData, ElementConfigSchema, ElementType
 from custom_components.haeo.core.state import EntityState
 from custom_components.haeo.core.units import currency_symbol, localize_currency, price_currency
 from custom_components.haeo.elements import (
@@ -925,16 +928,28 @@ class HaeoDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._stale_elements.clear()
 
         cost = await self._solve(network, context, started_at, forecast_timestamps)
+        # Report the relaxed solve before any committed run replaces its solution
+        await self._report_relaxations(network, context, started_at, forecast_timestamps)
+
+        model_outputs, cost, committed = await self._commit_appliance_runs(
+            network, loaded_configs, self._model_outputs(network), cost
+        )
 
         end_time = time.time()
         self._last_optimization_time = time.monotonic()
         _LOGGER.debug("Optimization completed successfully with cost: %s", cost)
-        await self._report_relaxations(network, context, started_at, forecast_timestamps)
 
         return CoordinatorData(
             context=context,
             outputs=self._build_outputs(
-                network, context, loaded_configs, cost, end_time - start_time, forecast_timestamps
+                network,
+                context,
+                loaded_configs,
+                model_outputs,
+                committed,
+                cost,
+                end_time - start_time,
+                forecast_timestamps,
             ),
             started_at=started_at,
             completed_at=dt_util.utc_from_timestamp(end_time).astimezone(),
@@ -1047,6 +1062,27 @@ class HaeoDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 translation_placeholders={"status": error.status},
             ) from error
 
+    @staticmethod
+    def _model_outputs(network: Network) -> dict[str, Mapping[ModelOutputName, OutputData]]:
+        """Return every model element's outputs from the solution the network currently holds."""
+        return {element_name: element.outputs() for element_name, element in network.elements.items()}
+
+    async def _commit_appliance_runs(
+        self,
+        network: Network,
+        loaded_configs: Mapping[str, ElementConfigData],
+        relaxed_outputs: Mapping[str, Mapping[ModelOutputName, OutputData]],
+        cost: float,
+    ) -> tuple[Mapping[str, Mapping[ModelOutputName, OutputData]], float, dict[str, RunPlan]]:
+        """Commit each armed appliance's run, solving again around it."""
+        return await commit_appliance_runs(
+            network,
+            loaded_configs,
+            relaxed_outputs,
+            cost,
+            lambda: self.hass.async_add_executor_job(network.optimize),
+        )
+
     async def _report_relaxations(
         self,
         network: Network,
@@ -1092,6 +1128,8 @@ class HaeoDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
         network: Network,
         context: OptimizationContext,
         loaded_configs: Mapping[str, ElementConfigData],
+        model_outputs: Mapping[str, Mapping[ModelOutputName, OutputData]],
+        committed: Mapping[str, RunPlan],
         cost: float,
         duration: float,
         forecast_timestamps: Sequence[float],
@@ -1114,9 +1152,6 @@ class HaeoDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
             }
         }
 
-        model_outputs: dict[str, Mapping[ModelOutputName, OutputData]] = {
-            element_name: element.outputs() for element_name, element in network.elements.items()
-        }
         forecast_times = forecast_datetimes(forecast_timestamps)
 
         # Each element's adapter turns model outputs into the outputs of its devices,
@@ -1132,6 +1167,7 @@ class HaeoDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     config=loaded_configs[element_name],
                     periods=network.periods,
                     forecast_times=forecast_times,
+                    committed=committed.get(element_name),
                 )
             except KeyError:
                 _LOGGER.exception(
@@ -1158,10 +1194,99 @@ class HaeoDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
         return outputs
 
 
+async def commit_appliance_runs(
+    network: Network,
+    loaded_configs: Mapping[str, ElementConfigData],
+    relaxed_outputs: Mapping[str, Mapping[ModelOutputName, OutputData]],
+    cost: float,
+    run_optimize: Callable[[], Awaitable[float]],
+) -> tuple[Mapping[str, Mapping[ModelOutputName, OutputData]], float, dict[str, RunPlan]]:
+    """Pin each armed appliance's committed run and solve again around it.
+
+    The relaxed solve may spread an appliance's run across periods no actuator
+    could follow, so its adapter offers the blocks it could execute, cheapest
+    first and priced from that solve. Each block is pinned in turn and the
+    network is solved again through ``run_optimize``; the cheapest block the
+    network can still supply is kept, so every other output describes the run
+    that will actually happen.
+
+    Appliances are committed one at a time in configured order, and each solve
+    keeps the blocks already committed, so a later appliance plans around the
+    ones before it. A candidate that cannot be supplied is skipped for the next
+    cheapest, and a later appliance's candidates are still priced from the first
+    relaxed solve, not from the committed ones.
+
+    If no block of an armed appliance can be supplied, the plan is published as
+    the relaxed solve reported it and every armed appliance is reported as not
+    running, since a commitment only describes a plan all of them take part in.
+    Relaxation is turned off while pinning so a block the network cannot supply
+    raises instead of relaxing some other constraint.
+
+    ``Network.optimize`` has no warm start, so every candidate is a fresh solve
+    from scratch.
+
+    Returns the outputs of the solve the plan comes from, its cost, and the run
+    committed for each appliance that has one.
+    """
+    candidates = {
+        name: adapter.run_candidates(
+            model_outputs=relaxed_outputs,
+            config=config,
+            periods=network.periods,
+        )
+        for name, config in loaded_configs.items()
+        if config[CONF_ELEMENT_TYPE] == ElementType.APPLIANCE
+        and isinstance(adapter := ELEMENT_TYPES[config[CONF_ELEMENT_TYPE]], CommittedRunAdapter)
+    }
+    armed = {name: plans for name, plans in candidates.items() if plans}
+    if not armed:
+        return relaxed_outputs, cost, {}
+
+    committed: dict[str, RunPlan] = {}
+    pinned: list[Appliance] = []
+    relaxed_cost = cost
+    relax_infeasible = network.relax_infeasible
+    network.relax_infeasible = False
+    try:
+        for name, plans in armed.items():
+            element = network.elements[name]
+            if not isinstance(element, Appliance):
+                continue
+            chosen: RunPlan | None = None
+            for plan in plans:
+                element.pinned_power = np.asarray(plan.power, dtype=np.float64)
+                try:
+                    cost = await run_optimize()
+                except InfeasibleError:
+                    continue
+                chosen = plan
+                break
+            if chosen is None:
+                element.pinned_power = None
+                return (
+                    relaxed_outputs,
+                    relaxed_cost,
+                    {name: _no_run(network.n_periods) for name in armed},
+                )
+            committed[name] = chosen
+            pinned.append(element)
+        outputs = {element_name: element.outputs() for element_name, element in network.elements.items()}
+        return outputs, cost, committed
+    finally:
+        network.relax_infeasible = relax_infeasible
+        for element in pinned:
+            element.pinned_power = None
+
+
 def _participant_name(model_element: str, participants: Collection[str]) -> str:
     """Return the configured element a model element belongs to, such as ``Grid`` for ``Grid:import``."""
     owners = [name for name in participants if model_element == name or model_element.startswith(f"{name}:")]
     return max(owners, key=len, default=model_element)
+
+
+def _no_run(period_count: int) -> RunPlan:
+    """Return the plan of an appliance that runs nothing in any period."""
+    return RunPlan(power=(0.0,) * period_count, start=None)
 
 
 def _plan_start(forecast_timestamps: Sequence[float]) -> str:
@@ -1193,5 +1318,6 @@ __all__ = [
     "OptimizationContext",
     "build_coordinator_output",
     "build_optimization_context",
+    "commit_appliance_runs",
     "forecast_datetimes",
 ]

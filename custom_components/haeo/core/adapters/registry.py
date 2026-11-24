@@ -1,6 +1,6 @@
 """Element adapter registry and model element collection."""
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import (
     Any,  # noqa: TID251  # ElementAdapter Protocol: each adapter's config/output types are narrower
     Protocol,
@@ -8,6 +8,7 @@ from typing import (
     runtime_checkable,
 )
 
+from custom_components.haeo.core.adapters.elements.appliance import RunPlan
 from custom_components.haeo.core.adapters.elements.appliance import adapter as appliance_adapter
 from custom_components.haeo.core.adapters.elements.battery import adapter as battery_adapter
 from custom_components.haeo.core.adapters.elements.battery_section import adapter as battery_section_adapter
@@ -26,9 +27,9 @@ from custom_components.haeo.core.adapters.elements.room import adapter as room_a
 from custom_components.haeo.core.adapters.elements.solar import adapter as solar_adapter
 from custom_components.haeo.core.adapters.elements.thermal_store import adapter as thermal_store_adapter
 from custom_components.haeo.core.const import CONF_ELEMENT_TYPE, ConnectivityLevel
-from custom_components.haeo.core.model import ModelElementConfig, ModelOutputName
+from custom_components.haeo.core.model import ModelElementConfig, ModelOutputName, ModelOutputValue
 from custom_components.haeo.core.model.elements import ELEMENTS
-from custom_components.haeo.core.model.output_data import ModelOutputValue, OutputData
+from custom_components.haeo.core.model.output_data import OutputData
 from custom_components.haeo.core.schema.elements import ElementConfigData, ElementType
 from custom_components.haeo.core.schema.elements.buffer import BufferRole
 
@@ -111,6 +112,28 @@ class ConfiguredRolesAdapter(Protocol):
         ...
 
 
+@runtime_checkable
+class CommittedRunAdapter(Protocol):
+    """An adapter that commits one run and solves again around it.
+
+    Such an element's relaxation may spread its energy where no actuator could
+    follow, so the coordinator asks for the runs it could execute, pins one at
+    a time, and re-solves until the network can supply it.
+    """
+
+    def run_candidates(
+        self,
+        model_outputs: Mapping[str, Mapping[ModelOutputName, ModelOutputValue]],
+        **_kwargs: Any,
+    ) -> Sequence[RunPlan]:
+        """Return the runs the element could execute, cheapest first.
+
+        Typed ``Any`` for the same reason as ``outputs``: each adapter narrows
+        the mapping and adds its own required keyword-only parameters.
+        """
+        ...
+
+
 ELEMENT_TYPES: dict[ElementType, ElementAdapter] = {
     ElementType.APPLIANCE: appliance_adapter,
     ElementType.GRID: grid_adapter,
@@ -157,6 +180,7 @@ def collect_model_elements(
 
 __all__ = [
     "ELEMENT_TYPES",
+    "CommittedRunAdapter",
     "ConfiguredRolesAdapter",
     "ElementAdapter",
     "collect_model_elements",
