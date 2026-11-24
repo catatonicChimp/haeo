@@ -4,6 +4,7 @@ from dataclasses import replace
 from typing import Literal
 
 from homeassistant.components.number import NumberEntityDescription
+from homeassistant.components.switch import SwitchEntityDescription
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.selector import BooleanSelector, NumberSelector
@@ -1288,6 +1289,51 @@ def test_normalizing_choose_selector_normalize_unknown_choice(
     )
     raw = {"active_choice": "unexpected", "constant": 10}
     assert selector._normalize(raw) == raw
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param({"active_choice": CHOICE_ENTITY, CHOICE_ENTITY: ["input_boolean.armed"]}, id="frontend_dict"),
+        pytest.param(["input_boolean.armed"], id="bare_list"),
+    ],
+)
+def test_entity_value_is_not_coerced_by_a_boolean_constant_choice(value: object) -> None:
+    """An entity list stays an entity even when the boolean constant choice is tried first.
+
+    A boolean choice accepts any truthy value, so a bare list submitted for a
+    field that puts the constant choice first would otherwise become True.
+    """
+    field = InputFieldInfo(
+        field_name="armed",
+        entity_description=SwitchEntityDescription(key="armed", translation_key="armed"),
+        output_type=OutputType.STATUS,
+    )
+    selector = build_choose_selector(
+        field,
+        allowed_choices=ALLOWED_CHOICES_REQUIRED,
+        preferred_choice=CHOICE_CONSTANT,
+    )
+    assert next(iter(selector.config["choices"])) == CHOICE_CONSTANT
+
+    assert selector(value) == ["input_boolean.armed"]
+
+
+def test_boolean_constant_is_not_read_as_an_entity() -> None:
+    """A boolean constant still validates when the boolean choice comes first."""
+    field = InputFieldInfo(
+        field_name="armed",
+        entity_description=SwitchEntityDescription(key="armed", translation_key="armed"),
+        output_type=OutputType.STATUS,
+    )
+    selector = build_choose_selector(
+        field,
+        allowed_choices=ALLOWED_CHOICES_REQUIRED,
+        preferred_choice=CHOICE_CONSTANT,
+    )
+
+    assert selector(False) is False
+    assert selector({"active_choice": CHOICE_CONSTANT, CHOICE_CONSTANT: True}) is True
 
 
 # --- Sectioned schema helpers tests ---

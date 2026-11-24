@@ -249,12 +249,18 @@ def get_preferred_choice(
 
 
 class NormalizingChooseSelector(ChooseSelector):  # type: ignore[type-arg]  # registering a selector erases its config type parameter
-    """ChooseSelector wrapper that normalizes raw dict format from frontend.
+    """ChooseSelector wrapper that normalizes the shapes the frontend submits.
 
-    Handles the case where frontend sends raw dict format like:
-    {"active_choice": "none", "constant": 100}
+    Handles the frontend's raw dict format, such as
+    {"active_choice": "none", "constant": 100}, where the value's key need not
+    be the name of the active choice.
 
-    Converts to expected format before delegating to ChooseSelector.
+    Also names the entity choice whenever the value is an entity, because a
+    bare value is matched against the choices in order and the first that
+    validates wins: a boolean choice accepts any truthy value, so a list of
+    entity IDs would be read as True when the constant choice comes first.
+
+    Converts to a shape ChooseSelector understands before delegating.
     """
 
     def __call__(self, data: Any) -> Any:  # matches upstream Selector.__call__(self, data: Any) -> Any signature
@@ -263,16 +269,29 @@ class NormalizingChooseSelector(ChooseSelector):  # type: ignore[type-arg]  # re
         return super().__call__(normalized)  # type: ignore[misc]  # the erased base hides Selector.__call__
 
     def _normalize(self, value: object) -> object:
-        """Normalize raw dict format to expected value."""
+        """Normalize a submitted value to a shape ChooseSelector resolves unambiguously."""
         if isinstance(value, dict) and "active_choice" in value:
             choice = value.get("active_choice")
             if choice == CHOICE_NONE:
                 return ""  # ConstantSelector expects empty string
             if choice == CHOICE_ENTITY:
-                return value.get(CHOICE_ENTITY, [])
+                return self._entity_choice(value.get(CHOICE_ENTITY, []))
             if choice == CHOICE_CONSTANT:
                 return value.get(CHOICE_CONSTANT)
+        if isinstance(value, list | str) and value and CHOICE_ENTITY in self.config.get("choices", {}):
+            return self._entity_choice(value)
         return value
+
+    @staticmethod
+    def _entity_choice(value: object) -> dict[str, object]:
+        """Return the dict shape that names the entity choice, so the value cannot be coerced by another one.
+
+        ChooseSelector's bare-value form tries each choice in order and keeps
+        the first that validates. A boolean choice coerces any truthy value, so
+        a bare entity list would be read as True whenever the constant choice
+        comes first. Naming the choice skips that guessing.
+        """
+        return {"active_choice": CHOICE_ENTITY, CHOICE_ENTITY: value}
 
 
 def build_choose_selector(
