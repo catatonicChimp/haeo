@@ -1316,6 +1316,8 @@ def _mip_lexicographic_reference(b_cost: float, x_limit: float, demand: float) -
     solver.setOptionValue("output_flag", False)
     solver.setOptionValue("solver", "choose")
     solver.setOptionValue("mip_rel_gap", 0.0)
+    solver.setOptionValue("mip_abs_gap", network_module._MIP_ABSOLUTE_GAP)
+    solver.setOptionValue("mip_feasibility_tolerance", network_module._MIP_FEASIBILITY_TOLERANCE)
     solver.addCols(
         2,
         np.zeros(2),
@@ -1355,7 +1357,7 @@ def _mip_lexicographic_reference(b_cost: float, x_limit: float, demand: float) -
     solver.addRows(
         1,
         np.array([-np.inf]),
-        np.array([primary_opt + 1e-9 * max(1.0, abs(primary_opt))]),
+        np.array([primary_opt + network_module._PRIMARY_BOUND_TOLERANCE * max(1.0, abs(primary_opt))]),
         2,
         np.array([0, 2], dtype=np.int32),
         np.array([0, 1], dtype=np.int32),
@@ -1379,6 +1381,21 @@ def test_mip_lexicographic_matches_independent_reference() -> None:
     assert outputs["b"].values == pytest.approx((reference_b,))
     assert outputs["x"].values == pytest.approx((reference_x,))
     assert outputs["b"].values[0] in (0.0, 1.0)
+
+
+def test_mip_secondary_selects_among_tied_primaries_and_fixed_lp_matches() -> None:
+    """When the primary is tied, the secondary discriminates and the fixed LP stays in tolerance."""
+    # b=0 meets demand with x=1.5 and primary cost -1.5.
+    # b=1 uses x=2.0 and primary cost 0.5 - 2.0 = -1.5, so both are primary-optimal.
+    # The secondary objective prefers b=1.
+    network, element = _build_binary_network(b_cost=0.5, x_limit=2.0, demand=1.5)
+    primary = network.optimize()
+    outputs = element.outputs()
+
+    expected_primary = -1.5
+    assert primary == pytest.approx(expected_primary, abs=network_module._FIXED_LP_TOLERANCE)
+    assert outputs["b"].values == pytest.approx((1.0,))
+    assert outputs["x"].values == pytest.approx((2.0,))
 
 
 def test_mip_rejects_fractional_lp_solution() -> None:

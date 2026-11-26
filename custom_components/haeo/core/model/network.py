@@ -90,8 +90,15 @@ _MIN_BLEND_WEIGHT: Final = 10.0**_CAL_LOG_LO
 _MAX_BLEND_WEIGHT: Final = 10.0**_CAL_LOG_HI
 # HiGHS's default simplex iteration limit, restored after the optimality check
 _UNLIMITED_ITERATIONS: Final = 2**31 - 1
-# Tolerance when bounding the primary objective for the secondary MIP solve
-_PRIMARY_BOUND_TOLERANCE: Final = 1e-9
+# MIP feasibility tolerance is set to the fixed-LP verification tolerance so the
+# integer assignment is provably within the window the subsequent LP checks.
+_MIP_FEASIBILITY_TOLERANCE: Final = 1e-7
+# Absolute MIP gap is much smaller than the feasibility budget so the reported
+# MIP optimum is exact relative to that budget.
+_MIP_ABSOLUTE_GAP: Final = 1e-9
+# The secondary MIP's temporary primary-bound row uses the MIP feasibility tolerance
+# as slack, so the row is no tighter than the solver's own feasibility budget.
+_PRIMARY_BOUND_TOLERANCE: Final = _MIP_FEASIBILITY_TOLERANCE
 # Tolerance when confirming the fixed-integer LP primary matches the MIP optimum
 _FIXED_LP_TOLERANCE: Final = 1e-7
 
@@ -414,8 +421,12 @@ class Network:
         h = self._solver
         _, previous_solver = h.getOptionValue("solver")
         _, previous_mip_rel_gap = h.getOptionValue("mip_rel_gap")
+        _, previous_mip_abs_gap = h.getOptionValue("mip_abs_gap")
+        _, previous_mip_feasibility_tolerance = h.getOptionValue("mip_feasibility_tolerance")
         h.setOptionValue("solver", "choose")
         h.setOptionValue("mip_rel_gap", 0.0)
+        h.setOptionValue("mip_abs_gap", _MIP_ABSOLUTE_GAP)
+        h.setOptionValue("mip_feasibility_tolerance", _MIP_FEASIBILITY_TOLERANCE)
         # If called from the infeasibility path, integrality is currently relaxed.
         h.restore_integrality()
         try:
@@ -469,6 +480,8 @@ class Network:
         finally:
             h.setOptionValue("solver", previous_solver)
             h.setOptionValue("mip_rel_gap", previous_mip_rel_gap)
+            h.setOptionValue("mip_abs_gap", previous_mip_abs_gap)
+            h.setOptionValue("mip_feasibility_tolerance", previous_mip_feasibility_tolerance)
 
     def _solve_blended(
         self,
