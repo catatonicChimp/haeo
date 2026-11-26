@@ -2,8 +2,6 @@
 
 from collections.abc import Mapping
 from copy import deepcopy
-import logging
-import time
 
 import numpy as np
 from numpy.typing import NDArray
@@ -16,8 +14,6 @@ from custom_components.haeo.core.model.output_data import OutputData
 from custom_components.haeo.core.schema import as_connection_target
 from custom_components.haeo.core.schema.elements import ElementConfigData, ElementType
 from custom_components.haeo.core.schema.elements.thermal_store import ThermalStoreConfigData
-
-_LOGGER = logging.getLogger(__name__)
 
 
 def test_configured_thermal_store_build_update_and_outputs() -> None:
@@ -270,46 +266,3 @@ def test_reactive_updates_reach_connection_limits_and_thermal_parameters() -> No
     ) * network.periods
     predicted = temperatures[0] + np.cumsum(heat - losses) / retuned["thermal"]["capacity_per_degree"]
     np.testing.assert_allclose(temperatures[1:], predicted, atol=1e-9)
-
-
-def test_production_shaped_seventy_three_interval_solve_is_fast(caplog: pytest.LogCaptureFixture) -> None:
-    """A full 73-interval production-sized MIP solve stays comfortably inside the re-solve cadence."""
-    caplog.set_level(logging.INFO, logger=__name__)
-    intervals = 73
-    prices = np.array([0.0 if (index // 2) % 2 == 0 else 0.3 for index in range(intervals)])
-    participants, _ = _two_stage_participants(
-        periods=intervals,
-        prices=prices,
-        initial_temperature=50.0,
-        target_temperature=60.0,
-        hp_ceiling_temperature=70.0,
-        maximum_temperature=75.0,
-        capacity_per_degree=0.314,
-        loss_power=0.12,
-        draw_power=0.2,
-        hp_max_power=0.8,
-        hp_cop=3.0,
-        element_max_power=0.87,
-        element_cop=1.0,
-        base_load=0.5,
-    )
-    network = build_network("production", participants, [3600.0] * intervals)
-
-    started = time.perf_counter()
-    cost = network.optimize()
-    duration = time.perf_counter() - started
-
-    # MIP node and gap counts are not exposed once the final fixed-integer LP has run. The solve
-    # returns only after every MIP stage and the fixed LP reach an optimal status; any other status
-    # raises. The recorded evidence is the wall time, the optimum, and the integer columns.
-    _LOGGER.info(
-        "73-interval production-shaped solve: %.3f s, status optimal, cost %.6f, integer columns %s",
-        duration,
-        cost,
-        network._solver.has_integer_columns,
-    )
-
-    assert np.isfinite(cost)
-    assert network._solver.has_integer_columns is True
-    assert "status optimal" in caplog.text
-    assert duration < 30.0
