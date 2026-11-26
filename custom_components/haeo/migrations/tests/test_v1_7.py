@@ -191,3 +191,46 @@ async def test_migration_renames_thermal_input_number_unique_ids(
         registry.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_{subentry.subentry_id}_hp_max_power")
         is not None
     )
+
+
+async def test_migration_passes_through_already_migrated_subentry_at_v6(
+    hass: HomeAssistant,
+) -> None:
+    """A subentry that already has two-stage sections is left untouched at v1.6."""
+    entry = MockConfigEntry(domain=DOMAIN, title="Hub", data={CONF_NAME: "Hub"}, version=1, minor_version=6)
+    entry.add_to_hass(hass)
+    data: dict[str, object] = {
+        CONF_ELEMENT_TYPE: ElementType.THERMAL_STORE,
+        CONF_NAME: "Shadow tank",
+        SECTION_THERMAL: {
+            "initial_temperature": as_constant_value(50.0),
+            "target_temperature": as_constant_value(60.0),
+            "maximum_temperature": as_constant_value(75.0),
+            "capacity_per_degree": as_constant_value(0.314),
+            "loss_power": as_constant_value(0.12),
+            "draw_power": as_constant_value(0.2),
+            "shortfall_price": as_constant_value(10.0),
+        },
+        SECTION_HEAT_PUMP: {
+            CONF_HP_CEILING_TEMPERATURE: as_constant_value(65.0),
+            CONF_HP_MAX_POWER: as_constant_value(1.2),
+            CONF_HP_COP: as_constant_value(3.5),
+        },
+        SECTION_ELEMENT: {
+            CONF_ELEMENT_MAX_POWER: as_constant_value(0.8),
+            CONF_ELEMENT_COP: as_constant_value(1.0),
+        },
+    }
+    subentry = ConfigSubentry(
+        data=MappingProxyType(data),
+        subentry_type=ElementType.THERMAL_STORE,
+        title="Shadow tank",
+        unique_id="sub_thermal",
+    )
+    hass.config_entries.async_add_subentry(entry, subentry)
+
+    assert await v1_7.async_migrate_entry(hass, entry)
+
+    updated_entry = hass.config_entries.async_get_entry(entry.entry_id)
+    assert updated_entry is not None
+    assert dict(updated_entry.subentries[subentry.subentry_id].data) == data

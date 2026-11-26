@@ -36,6 +36,11 @@ def migrate_element_config(config: Mapping[str, object]) -> dict[str, object] | 
         return None
 
     thermal = section_dict(config, SECTION_THERMAL)
+
+    # Already-migrated configs keep their heat-pump and element sections unchanged.
+    if SECTION_HEAT_PUMP in config and "cop" not in thermal and "max_power" not in thermal:
+        return dict(config)
+
     heat_pump: dict[str, object] = {}
     element: dict[str, object] = {}
 
