@@ -1383,19 +1383,41 @@ def test_mip_lexicographic_matches_independent_reference() -> None:
     assert outputs["b"].values[0] in (0.0, 1.0)
 
 
-def test_mip_secondary_selects_among_tied_primaries_and_fixed_lp_matches() -> None:
-    """When the primary is tied, the secondary discriminates and the fixed LP stays in tolerance."""
-    # b=0 meets demand with x=1.5 and primary cost -1.5.
-    # b=1 uses x=2.0 and primary cost 0.5 - 2.0 = -1.5, so both are primary-optimal.
-    # The secondary objective prefers b=1.
-    network, element = _build_binary_network(b_cost=0.5, x_limit=2.0, demand=1.5)
+def test_mip_secondary_selects_among_exactly_tied_primaries() -> None:
+    """Two feasible integer alternatives have the same primary cost; the secondary chooses."""
+    # demand=0 makes b=0 feasible (x=0) with primary cost 0.
+    # b=1 with x_limit=2 and b_cost=2 gives primary cost -2 + 2 = 0, a perfect tie.
+    # The secondary objective (-b) breaks the tie in favor of b=1.
+    network, element = _build_binary_network(b_cost=2.0, x_limit=2.0, demand=0.0)
     primary = network.optimize()
     outputs = element.outputs()
 
-    expected_primary = -1.5
-    assert primary == pytest.approx(expected_primary, abs=network_module._FIXED_LP_TOLERANCE)
+    assert primary == pytest.approx(0.0, abs=network_module._FIXED_LP_TOLERANCE)
     assert outputs["b"].values == pytest.approx((1.0,))
     assert outputs["x"].values == pytest.approx((2.0,))
+
+
+def test_mip_secondary_accepts_assignment_inside_combined_tolerance_budget() -> None:
+    """The secondary-preferred assignment sits just outside the explicit row slack.
+
+    Both b=0 (x=0, primary 0) and b=1 are feasible. With b_cost slightly above
+    x_limit, b=1 at x=x_limit has a primary cost worse than the optimum by more
+    than the explicit primary-bound slack but still within the combined budget of
+    slack plus MIP-feasibility tolerance. The fixed-LP check must accept it;
+    a check tolerance of only 1e-7 would reject it.
+    """
+    # b=1 at x=2 gives primary cost = -2 + (2 + 1.5e-7) = 1.5e-7.
+    network, element = _build_binary_network(b_cost=2.0 + 1.5e-7, x_limit=2.0, demand=0.0)
+    primary = network.optimize()
+    outputs = element.outputs()
+
+    # The secondary objective chose b=1.
+    assert outputs["b"].values == pytest.approx((1.0,))
+    assert outputs["x"].values == pytest.approx((2.0,))
+    # The fixed-LP primary is worse than the b=0 optimum by more than the
+    # explicit row slack alone, proving the MIP feasibility tolerance can spend
+    # extra budget. It is still within the combined budget we check against.
+    assert network_module._PRIMARY_BOUND_TOLERANCE < primary <= network_module._FIXED_LP_TOLERANCE
 
 
 def test_mip_rejects_fractional_lp_solution() -> None:

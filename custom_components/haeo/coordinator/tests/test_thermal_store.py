@@ -433,9 +433,7 @@ async def test_infeasible_pinned_candidate_retries_and_restores_integers() -> No
     )
 
     # The cheapest block starts in the blocked period, fails, and a later block succeeds.
-    assert attempts[0] is False
-    assert attempts[-1] is True
-    assert True in attempts
+    assert attempts == [False, True]
     plan = committed["dishwasher"]
     assert plan.start is not None
     assert plan.start > 0

@@ -90,17 +90,22 @@ _MIN_BLEND_WEIGHT: Final = 10.0**_CAL_LOG_LO
 _MAX_BLEND_WEIGHT: Final = 10.0**_CAL_LOG_HI
 # HiGHS's default simplex iteration limit, restored after the optimality check
 _UNLIMITED_ITERATIONS: Final = 2**31 - 1
-# MIP feasibility tolerance is set to the fixed-LP verification tolerance so the
-# integer assignment is provably within the window the subsequent LP checks.
+# MIP feasibility tolerance: the largest row violation HiGHS may accept for an
+# integer-feasible solution. We set it explicitly rather than relying on the
+# HiGHS default.
 _MIP_FEASIBILITY_TOLERANCE: Final = 1e-7
 # Absolute MIP gap is much smaller than the feasibility budget so the reported
 # MIP optimum is exact relative to that budget.
 _MIP_ABSOLUTE_GAP: Final = 1e-9
-# The secondary MIP's temporary primary-bound row uses the MIP feasibility tolerance
-# as slack, so the row is no tighter than the solver's own feasibility budget.
-_PRIMARY_BOUND_TOLERANCE: Final = _MIP_FEASIBILITY_TOLERANCE
-# Tolerance when confirming the fixed-integer LP primary matches the MIP optimum
-_FIXED_LP_TOLERANCE: Final = 1e-7
+# Slack added to the temporary primary-bound row for the secondary MIP. A
+# secondary solution can be worse than the true primary optimum by up to this
+# explicit slack plus the solver's own MIP-feasibility tolerance.
+_PRIMARY_BOUND_TOLERANCE: Final = 1e-7
+# Tolerance when confirming the fixed-integer LP primary matches the MIP optimum.
+# This must cover the worst-case accumulated error: the explicit primary-bound
+# slack (1e-7) plus the MIP feasibility tolerance (1e-7), plus a 0.5e-7 safety
+# margin: 1e-7 + 1e-7 + 0.5e-7 = 2.5e-7.
+_FIXED_LP_TOLERANCE: Final = 2.5e-7
 
 
 @dataclass(frozen=True, kw_only=True)
