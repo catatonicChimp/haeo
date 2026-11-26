@@ -254,7 +254,7 @@ def _production_participants() -> tuple[dict[str, ElementConfigData], ThermalSto
         element_type=ElementType.GRID,
         name="grid",
         connection=as_connection_target("switchboard"),
-        pricing={"price_source_target": prices, "price_target_source": np.zeros(intervals)},
+        pricing={"price_source_target": prices, "price_target_source": np.full(intervals, 0.05)},
         power_limits={"max_power_source_target": 11.0, "max_power_target_source": 10.0},
     )
     tank = ThermalStoreConfigData(
