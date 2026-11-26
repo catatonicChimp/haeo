@@ -37,6 +37,13 @@ class HighsModelStatus(IntEnum):
     kUnknown = 15
     kSolutionLimit = 16
 
+class HighsVarType(IntEnum):
+    kContinuous = 0
+    kInteger = 1
+    kImplicitInteger = 2
+    kSemiContinuous = 3
+    kSemiInteger = 4
+
 class HighsCallback:
     def __iadd__(self, callback: Callable[[int, str], None]) -> HighsCallback: ...
 
@@ -173,7 +180,22 @@ class Highs:
         costs: NDArray[np.float64],
     ) -> None: ...
     def changeColBounds(self, col: int, lower: float, upper: float) -> None: ...
+    def changeColsBounds(
+        self,
+        num_cols: int,
+        cols: NDArray[np.int32],
+        lower_bounds: NDArray[np.float64],
+        upper_bounds: NDArray[np.float64],
+    ) -> HighsStatus: ...
+    def changeColsIntegrality(
+        self,
+        num_cols: int,
+        cols: NDArray[np.int32],
+        integrality: NDArray[np.uint8],
+    ) -> HighsStatus: ...
+    def getColIntegrality(self, col: int) -> tuple[HighsStatus, HighsVarType]: ...
     def changeCoeff(self, row: int, col: int, value: float) -> None: ...
+    def deleteRows(self, num_rows: int, rows: NDArray[np.int32]) -> HighsStatus: ...
     def getInfoValue(self, info: str) -> tuple[HighsStatus, int | float]: ...
     def getInfo(self) -> HighsInfo: ...
     def getBasis(self) -> HighsBasis: ...
