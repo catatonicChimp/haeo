@@ -392,6 +392,37 @@ def test_diag_gives_an_ev_exported_without_a_public_charging_price_the_default(
     assert "Optimization complete" in capsys.readouterr().out
 
 
+def test_migrate_participants_for_diag_applies_v1_7_to_thermal_store() -> None:
+    """A pre-v1.7 thermal store gets two-stage sections; a v1.7+ store passes through."""
+    old_thermal: dict[str, object] = {
+        "element_type": "thermal_store",
+        "name": "Tank",
+        "thermal": {
+            "initial_temperature": as_constant_value(50.0),
+            "target_temperature": as_constant_value(60.0),
+            "maximum_temperature": as_constant_value(75.0),
+            "capacity_per_degree": as_constant_value(0.314),
+            "cop": as_constant_value(3.0),
+            "loss_power": as_constant_value(0.12),
+            "draw_power": as_constant_value(0.2),
+            "max_power": as_constant_value(0.8),
+            "shortfall_price": as_constant_value(10.0),
+        },
+    }
+    migrated = diag.migrate_participants_for_diag({"minor_version": 6}, {"Tank": old_thermal})
+    tank_migrated = migrated["Tank"]
+    assert isinstance(tank_migrated, dict)
+    assert isinstance(tank_migrated["heat_pump"], dict)
+    assert isinstance(tank_migrated["element"], dict)
+    assert tank_migrated["heat_pump"]["hp_cop"] == as_constant_value(3.0)
+    assert tank_migrated["heat_pump"]["hp_max_power"] == as_constant_value(0.8)
+    assert tank_migrated["element"]["element_max_power"] == as_constant_value(0.0)
+
+    already_migrated = {"Tank": migrated["Tank"]}
+    pass_through = diag.migrate_participants_for_diag({"minor_version": 7}, already_migrated)
+    assert pass_through == already_migrated
+
+
 @pytest.mark.parametrize(
     ("config", "expected"),
     [

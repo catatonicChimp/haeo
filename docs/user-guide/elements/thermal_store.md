@@ -15,11 +15,20 @@ Add a thermal store connected to the shadow switchboard.
 - Readiness temperature: a constant or forecast of desired boundary temperatures.
 - Physical maximum: the equipment's verified maximum in C, not its comfort target.
 - Effective thermal capacity: kWh/K; volume alone does not establish effective capacity.
-- Heat pump COP: a positive dimensionless ratio, not a percentage.
 - Standing heat loss: thermal kW.
 - Expected hot-water draw: thermal kW, scaled by each interval's duration.
-- Maximum electrical power: kW, not thermal output.
 - Readiness shortfall price: positive currency per thermal kWh at each boundary.
+
+## Heat pump inputs
+
+- Heat pump ceiling temperature: the upper temperature at which the heat pump may run. A period starting above this temperature uses only the resistive element.
+- Maximum heat pump power: kW of electrical input; set to 0 to disable the heat pump.
+- Heat pump COP: a positive dimensionless ratio, not a percentage.
+
+## Resistive element inputs
+
+- Maximum element power: kW of electrical input; set to 0 to disable the element.
+- Element COP: a positive dimensionless ratio (typically 1.0 for direct resistance heating).
 
 No volume, COP, draw or hygiene behavior is inferred from a device name.
 Enter explicit research assumptions and validate them against recorded behavior.
@@ -27,7 +36,7 @@ An unreachable readiness target produces a visible shortfall; conflicting physic
 
 ## Sensors
 
-The element exposes planned heating power, predicted tank temperature and readiness shortfall with forecast attributes.
+The element exposes planned heat-pump power, planned element power, combined planned heating power, predicted tank temperature and readiness shortfall with forecast attributes.
 The hub's existing optimization status reports failures.
 These are counterfactual optimized forecasts, not predictions of actual tank behavior while EMHASS remains in charge.
 Compare actual behavior only where actual heating matches the modeled input, or replay actual power separately.

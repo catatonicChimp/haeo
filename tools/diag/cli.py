@@ -51,6 +51,8 @@ from custom_components.haeo.core.schema.migrations.v1_4 import MINOR_VERSION as 
 from custom_components.haeo.core.schema.migrations.v1_4 import migrate_hub_horizon, migrate_participants, predates_v1_4
 from custom_components.haeo.core.schema.migrations.v1_6 import MINOR_VERSION as PUBLIC_PRICE_MINOR_VERSION
 from custom_components.haeo.core.schema.migrations.v1_6 import migrate_element_config as migrate_public_charging_price
+from custom_components.haeo.core.schema.migrations.v1_7 import MINOR_VERSION as THERMAL_STORE_MINOR_VERSION
+from custom_components.haeo.core.schema.migrations.v1_7 import migrate_element_config as migrate_two_stage_thermal_store
 from custom_components.haeo.core.schema.sections import SECTION_PRICING
 from custom_components.haeo.core.schema.sections.common import CONF_CONNECTION
 
@@ -223,9 +225,14 @@ def migrate_participants_for_diag(
         if version >= MIGRATED_MINOR_VERSION and not predates_v1_4(config, participants.values())
         else migrate_participants(participants, advanced_mode=config_advanced_mode(config)).participants
     )
-    if version >= PUBLIC_PRICE_MINOR_VERSION:
+    if version < PUBLIC_PRICE_MINOR_VERSION:
+        migrated = {
+            name: migrate_public_charging_price(participant) or participant for name, participant in migrated.items()
+        }
+
+    if version >= THERMAL_STORE_MINOR_VERSION:
         return migrated
-    return {name: migrate_public_charging_price(participant) or participant for name, participant in migrated.items()}
+    return {name: migrate_two_stage_thermal_store(participant) or participant for name, participant in migrated.items()}
 
 
 def config_horizon_preset(config: Mapping[str, JsonValueType]) -> str:

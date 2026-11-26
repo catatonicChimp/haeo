@@ -21,11 +21,18 @@ def test_configured_thermal_store_build_update_and_outputs() -> None:
             "target_temperature": np.array([50.0, 50.0, 60.0]),
             "maximum_temperature": 75.0,
             "capacity_per_degree": 0.1,
-            "cop": np.full(2, 2.0),
             "loss_power": np.zeros(2),
             "draw_power": np.zeros(2),
-            "max_power": np.ones(2),
-            "shortfall_price": np.full(3, 10.0),
+            "shortfall_price": np.array([10.0, 10.0, 10.0]),
+        },
+        heat_pump={
+            "hp_ceiling_temperature": 75.0,
+            "hp_max_power": np.ones(2),
+            "hp_cop": np.full(2, 2.0),
+        },
+        element={
+            "element_max_power": np.zeros(2),
+            "element_cop": np.ones(2),
         },
     )
     participants: dict[str, ElementConfigData] = {
@@ -44,6 +51,7 @@ def test_configured_thermal_store_build_update_and_outputs() -> None:
     outputs = {name: element.outputs() for name, element in network.elements.items()}
     result = adapter.outputs("tank", outputs, config=tank)
     assert result[ElementType.THERMAL_STORE]["thermal_store_temperature"].values[-1] == pytest.approx(60.0)
+    assert result[ElementType.THERMAL_STORE]["thermal_store_power_element"].values == pytest.approx((0.0, 0.0))
     updater = build_element_updaters(network, participants)["tank"]
     tank["thermal"]["initial_temperature"] = 55.0
     updater(tank)

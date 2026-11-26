@@ -664,14 +664,24 @@
           "description": "Use a separate shadow hub. This experimental model has no appliance commands. Thermal capacity, COP and draw are estimates until calibrated.",
           "data": { "connection": "Connection", "name": "Name" },
           "sections": {
+            "element": {
+              "data": { "element_cop": "Element COP", "element_max_power": "Maximum element power" },
+              "name": "Resistive element"
+            },
+            "heat_pump": {
+              "data": {
+                "hp_ceiling_temperature": "Heat pump ceiling temperature",
+                "hp_cop": "Heat pump COP",
+                "hp_max_power": "Maximum heat pump power"
+              },
+              "name": "Heat pump"
+            },
             "thermal": {
               "data": {
                 "capacity_per_degree": "Effective thermal capacity (kWh/K)",
-                "cop": "Heat pump COP",
                 "draw_power": "Expected hot-water draw (thermal kW)",
                 "initial_temperature": "Measured tank temperature",
                 "loss_power": "Standing heat loss (thermal kW)",
-                "max_power": "Maximum electrical power",
                 "maximum_temperature": "Physical maximum temperature",
                 "shortfall_price": "Readiness shortfall price",
                 "target_temperature": "Readiness temperature"
@@ -682,6 +692,7 @@
         }
       },
       "error": {
+        "invalid_ceiling": "Heat pump ceiling temperature must not exceed the physical maximum",
         "invalid_endpoint": "This element applies its own prices, forecasts, and limits on its own connection, so it cannot be connected to directly. Choose the element it is connected to instead.",
         "missing_name": "Name is required",
         "name_exists": "A device with this name already exists",
@@ -784,11 +795,14 @@
       "room_response": { "name": "HVAC response (K per electrical kWh)" },
       "solar_forecast": { "name": "Forecast" },
       "thermal_store_capacity_per_degree": { "name": "Effective thermal capacity (kWh/K)" },
-      "thermal_store_cop": { "name": "Heat pump COP" },
       "thermal_store_draw_power": { "name": "Expected hot-water draw (thermal kW)" },
+      "thermal_store_element_cop": { "name": "Element COP" },
+      "thermal_store_element_max_power": { "name": "Maximum element power" },
+      "thermal_store_hp_ceiling_temperature": { "name": "Heat pump ceiling temperature" },
+      "thermal_store_hp_cop": { "name": "Heat pump COP" },
+      "thermal_store_hp_max_power": { "name": "Maximum heat pump power" },
       "thermal_store_initial_temperature": { "name": "Measured tank temperature" },
       "thermal_store_loss_power": { "name": "Standing heat loss (thermal kW)" },
-      "thermal_store_max_power": { "name": "Maximum electrical power" },
       "thermal_store_maximum_temperature": { "name": "Physical maximum temperature" },
       "thermal_store_shortfall_price": { "name": "Readiness shortfall price" },
       "thermal_store_target_temperature": { "name": "Readiness temperature" }
@@ -873,6 +887,8 @@
       "solar_forecast_limit": { "name": "Forecast limit shadow price" },
       "solar_power": { "name": "Power" },
       "thermal_store_power": { "name": "Planned heating power" },
+      "thermal_store_power_element": { "name": "Planned element power" },
+      "thermal_store_power_hp": { "name": "Planned heat pump power" },
       "thermal_store_shortfall": { "name": "Readiness shortfall" },
       "thermal_store_temperature": { "name": "Predicted tank temperature" }
     },
