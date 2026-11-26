@@ -4,6 +4,9 @@ Shadow prices are dual values from the linear programming optimization.
 They quantify how much the total objective would improve if a constraint were relaxed by one unit.
 In HAEO, shadow prices help explain why the optimizer makes certain decisions and highlight where additional flexibility creates the most value.
 
+When the model contains integer variables, the shadow prices are taken from the continuous LP that results after fixing those variables to the value chosen by the MIP.
+They are therefore conditional on that fixed discrete assignment: a different integer choice could leave a different set of constraints binding and produce different marginal values.
+
 ## What shadow prices tell you
 
 Every constraint in the optimization problem has an associated shadow price.

@@ -1,9 +1,17 @@
 """Tests for naming and listing the rows of an infeasible model."""
 
+from highspy import HighsVarType
 import numpy as np
 import pytest
 
-from custom_components.haeo.core.model.infeasibility import MAX_LISTED_ROWS, RowLabel, listing, row_labels
+from custom_components.haeo.core.model.infeasibility import (
+    MAX_LISTED_ROWS,
+    RowLabel,
+    continuous_relaxation,
+    listing,
+    row_labels,
+)
+from custom_components.haeo.core.model.solver import Solver
 
 
 def test_row_labels_give_periods_to_whole_blocks_and_mark_balance_rows() -> None:
@@ -53,3 +61,28 @@ def test_row_labels_give_periods_to_whole_blocks_and_mark_balance_rows() -> None
 def test_listing_counts_the_rows_past_the_limit(count: int, expected: str) -> None:
     """A listing names its first rows and counts the rest."""
     assert listing(f"row{i}" for i in range(count)) == expected
+
+
+def test_continuous_relaxation_relaxes_and_restores_integrality() -> None:
+    """The continuous-relaxation context manager relaxes integers and restores them on exit."""
+    solver = Solver()
+    solver.setOptionValue("output_flag", False)
+    solver.add_binary_variables(1, name="b")
+
+    with continuous_relaxation(solver):
+        assert solver.getColIntegrality(0)[1] == HighsVarType.kContinuous
+
+    assert solver.getColIntegrality(0)[1] == HighsVarType.kInteger
+
+
+def test_continuous_relaxation_restores_integrality_after_solve_error() -> None:
+    """Integrality is restored even if the diagnostic solve fails."""
+    solver = Solver()
+    solver.setOptionValue("output_flag", False)
+    solver.add_binary_variables(1, name="b")
+    message = "diagnostic failed"
+
+    with pytest.raises(RuntimeError), continuous_relaxation(solver):
+        raise RuntimeError(message)
+
+    assert solver.getColIntegrality(0)[1] == HighsVarType.kInteger

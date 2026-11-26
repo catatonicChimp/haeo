@@ -9,8 +9,9 @@ Rows are named here by the element and constraint that own them, and the
 period they cover, so a conflict reads in terms of the network.
 """
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from collections.abc import Set as AbstractSet
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Final, NamedTuple
 
@@ -93,6 +94,24 @@ def listing(items: Iterable[str]) -> str:
     shown = ", ".join(names[:MAX_LISTED_ROWS])
     hidden = len(names) - MAX_LISTED_ROWS
     return f"{shown}, and {hidden} more" if hidden > 0 else shown
+
+
+@contextmanager
+def continuous_relaxation(solver: Solver) -> Iterator[None]:
+    """Relax integrality for the duration of the block, then restore it.
+
+    IIS and feasibility relaxation diagnostics are run on the continuous
+    relaxation. Integrality is restored when the block ends so the exact MIP can
+    be solved afterwards.
+    """
+    had_integers = solver.has_integer_columns
+    if had_integers:
+        solver.relax_integrality()
+    try:
+        yield
+    finally:
+        if had_integers:
+            solver.restore_integrality()
 
 
 def row_labels(
@@ -204,6 +223,7 @@ __all__ = [
     "RelaxedRows",
     "RowLabel",
     "conflicting_rows",
+    "continuous_relaxation",
     "listing",
     "relaxed_rows",
     "row_labels",

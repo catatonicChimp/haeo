@@ -31,7 +31,16 @@ from .elements.node import Node, NodeElementConfig
 from .elements.policy_pricing import PolicyPricing, PolicyPricingElementConfig
 from .elements.room import Room, RoomElementConfig
 from .elements.thermal_store import ThermalStore, ThermalStoreElementConfig
-from .infeasibility import InfeasibleError, Relaxation, RowLabel, conflicting_rows, listing, row_labels, solve_relaxed
+from .infeasibility import (
+    InfeasibleError,
+    Relaxation,
+    RowLabel,
+    conflicting_rows,
+    continuous_relaxation,
+    listing,
+    row_labels,
+    solve_relaxed,
+)
 from .linear import LinearArray, total
 from .solver import Solver
 from .util.solver_rows import RowIndices, add_rows
@@ -361,9 +370,7 @@ class Network:
         except InfeasibleError:
             # IIS and feasibility relaxation are run on the continuous relaxation;
             # the final plan is still the exact MIP after the widened rows are restored.
-            if h.has_integer_columns:
-                h.relax_integrality()
-            try:
+            with continuous_relaxation(h):
                 balance_rows = {
                     row
                     for element in self.elements.values()
@@ -377,13 +384,10 @@ class Network:
 
                 relaxed = solve_relaxed(h, labels, partial(self._solve_exact, all_col_indices, objectives, primary))
                 if relaxed is None:
-                    raise InfeasibleError(self.conflicts)
+                    raise InfeasibleError(self.conflicts) from None
                 cost, self.relaxations = relaxed
                 _LOGGER.debug("Relaxed constraints to find a plan: %s", listing(map(str, self.relaxations)))
                 return cost
-            finally:
-                if h.has_integer_columns:
-                    h.restore_integrality()
 
     def _solve(self, all_col_indices: NDArray[np.int32], objectives: Objectives) -> float:
         """Solve the blended objective, calibrating its weight on the first solve."""
@@ -412,6 +416,8 @@ class Network:
         _, previous_mip_rel_gap = h.getOptionValue("mip_rel_gap")
         h.setOptionValue("solver", "choose")
         h.setOptionValue("mip_rel_gap", 0.0)
+        # If called from the infeasibility path, integrality is currently relaxed.
+        h.restore_integrality()
         try:
             # Primary objective to global optimality
             _set_objective(h, all_col_indices, objectives.cost)

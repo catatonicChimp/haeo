@@ -56,6 +56,8 @@ It delivers a global optimum when a feasible solution exists and scales well as 
     **Deferrable loads follow that approach**: a [deferrable load](model-layer/elements/deferrable_load.md) is pure LP, with each window's requirement settled at its end and any shortfall priced rather than enforced.
     Loads that need a discrete **run-now** decision, such as fixed-power appliances that cannot modulate, are still fixed or forecast consumption, or scheduled externally (for example via EMHASS) and passed in as inputs.
 
+    When an element genuinely needs a discrete on/off decision, the model adds binary variables and solves the exact MILP. IIS and feasibility relaxation diagnostics are run on the continuous relaxation, then the exact MILP is solved again after any widened rows are restored.
+
 ## Mathematical model structure
 
 HAEO formulates energy system optimization as a network where elements contribute to a unified linear program.
@@ -100,6 +102,14 @@ The primary objective is priced last, so its dual values at the plan's basis are
 
 The secondary's reduced costs are scaled by the small blend weight, so the solver runs with feasibility tolerances of $10^{-9}$ rather than the HiGHS default of $10^{-7}$.
 At the default, tie-breaking differences can fall below the tolerance and leave equally cheap plans unresolved.
+
+When the model contains integer variables, the solution process is still lexicographic but uses a mixed-integer solver.
+The primary objective is solved to global optimality (zero MIP gap), a temporary constraint bounds the primary value at that optimum, and the secondary objective is solved as a second MIP.
+The integer assignment is then fixed, and the existing checked blended LP is solved to obtain valid shadow prices.
+Finally, integrality is restored so later reactive re-solves start fresh MIPs rather than reusing the fixed-integer basis.
+
+Because the shadow prices come from the continuous LP with the discrete assignment fixed, they are **conditional on that fixed assignment**.
+A different integer choice could change which constraints are binding and therefore change the marginal values.
 
 ### Solution outcomes
 
