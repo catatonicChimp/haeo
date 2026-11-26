@@ -96,4 +96,3 @@ def test_fixing_and_restoring_integer_columns() -> None:
     _, _, _, lower, upper, _ = solver.getCols(2, np.arange(2, dtype=np.int32))
     np.testing.assert_array_equal(lower, [0.0, 0.0])
     np.testing.assert_array_equal(upper, [1.0, 1.0])
-

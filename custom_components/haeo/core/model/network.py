@@ -34,7 +34,7 @@ from .elements.thermal_store import ThermalStore, ThermalStoreElementConfig
 from .infeasibility import InfeasibleError, Relaxation, RowLabel, conflicting_rows, listing, row_labels, solve_relaxed
 from .linear import LinearArray, total
 from .solver import Solver
-from .util.solver_rows import RowIndices
+from .util.solver_rows import RowIndices, add_rows
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -81,6 +81,10 @@ _MIN_BLEND_WEIGHT: Final = 10.0**_CAL_LOG_LO
 _MAX_BLEND_WEIGHT: Final = 10.0**_CAL_LOG_HI
 # HiGHS's default simplex iteration limit, restored after the optimality check
 _UNLIMITED_ITERATIONS: Final = 2**31 - 1
+# Tolerance when bounding the primary objective for the secondary MIP solve
+_PRIMARY_BOUND_TOLERANCE: Final = 1e-9
+# Tolerance when confirming the fixed-integer LP primary matches the MIP optimum
+_FIXED_LP_TOLERANCE: Final = 1e-7
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -353,31 +357,112 @@ class Network:
         self.conflicts = ()
         self.relaxations = ()
         try:
-            return self._solve(all_col_indices, objectives)
+            return self._solve_exact(all_col_indices, objectives, primary)
         except InfeasibleError:
-            balance_rows = {
-                row
-                for element in self.elements.values()
-                if isinstance(element, NetworkElement) and (rows := element.balance_rows()) is not None
-                for row in rows.tolist()
-            }
-            labels = row_labels(self.constraints(), self.n_periods, balance_rows)
-            self.conflicts = conflicting_rows(h, labels)
-            if not self.relax_infeasible:
-                raise InfeasibleError(self.conflicts) from None
+            # IIS and feasibility relaxation are run on the continuous relaxation;
+            # the final plan is still the exact MIP after the widened rows are restored.
+            if h.has_integer_columns:
+                h.relax_integrality()
+            try:
+                balance_rows = {
+                    row
+                    for element in self.elements.values()
+                    if isinstance(element, NetworkElement) and (rows := element.balance_rows()) is not None
+                    for row in rows.tolist()
+                }
+                labels = row_labels(self.constraints(), self.n_periods, balance_rows)
+                self.conflicts = conflicting_rows(h, labels)
+                if not self.relax_infeasible:
+                    raise InfeasibleError(self.conflicts) from None
 
-        relaxed = solve_relaxed(h, labels, partial(self._solve, all_col_indices, objectives))
-        if relaxed is None:
-            raise InfeasibleError(self.conflicts)
-        cost, self.relaxations = relaxed
-        _LOGGER.debug("Relaxed constraints to find a plan: %s", listing(map(str, self.relaxations)))
-        return cost
+                relaxed = solve_relaxed(h, labels, partial(self._solve_exact, all_col_indices, objectives, primary))
+                if relaxed is None:
+                    raise InfeasibleError(self.conflicts)
+                cost, self.relaxations = relaxed
+                _LOGGER.debug("Relaxed constraints to find a plan: %s", listing(map(str, self.relaxations)))
+                return cost
+            finally:
+                if h.has_integer_columns:
+                    h.restore_integrality()
 
     def _solve(self, all_col_indices: NDArray[np.int32], objectives: Objectives) -> float:
         """Solve the blended objective, calibrating its weight on the first solve."""
         if self._blend_weight is None:
             self._blend_weight = self._calibrate_blend_weight(all_col_indices, objectives)
         return self._solve_blended(all_col_indices, objectives, self._blend_weight)
+
+    def _solve_exact(self, all_col_indices: NDArray[np.int32], objectives: Objectives, primary: LinearArray) -> float:
+        """Solve to the exact lexicographic optimum, using MIP when integers are present."""
+        if self._solver.has_integer_columns:
+            return self._solve_mip(all_col_indices, objectives, primary)
+        return self._solve(all_col_indices, objectives)
+
+    def _solve_mip(self, all_col_indices: NDArray[np.int32], objectives: Objectives, primary: LinearArray) -> float:
+        """Lexicographic two-stage MIP: primary optimum, then secondary, then fixed-integer LP for duals.
+
+        The primary objective is solved to global optimality (zero MIP gap), a
+        temporary row bounds the primary value at its optimum, and the secondary
+        objective is solved as a second MIP. The temporary row is removed on every
+        exit path. The integer assignment is then fixed and the existing checked
+        blended LP is solved to obtain valid dual values. Integrality is restored
+        before returning so later reactive re-solves start fresh MIPs.
+        """
+        h = self._solver
+        _, previous_solver = h.getOptionValue("solver")
+        _, previous_mip_rel_gap = h.getOptionValue("mip_rel_gap")
+        h.setOptionValue("solver", "choose")
+        h.setOptionValue("mip_rel_gap", 0.0)
+        try:
+            # Primary objective to global optimality
+            _set_objective(h, all_col_indices, objectives.cost)
+            h.run()
+            status = h.getModelStatus()
+            if status == HighsModelStatus.kUnboundedOrInfeasible:
+                status = _status_without_presolve(h)
+            if status == HighsModelStatus.kTimeLimit:
+                raise SolverError(h.modelStatusToString(status))
+            if status == HighsModelStatus.kInfeasible:
+                raise InfeasibleError
+            if status != HighsModelStatus.kOptimal:
+                raise SolverError(h.modelStatusToString(status))
+            mip_optimum = h.getObjectiveValue()
+
+            # Secondary objective while keeping the primary at its optimum
+            primary_bound = mip_optimum + _PRIMARY_BOUND_TOLERANCE * max(1.0, abs(mip_optimum))
+            temp_rows, _ = add_rows(h, primary <= primary_bound)
+            try:
+                _set_objective(h, all_col_indices, objectives.secondary)
+                h.run()
+                status = h.getModelStatus()
+                if status == HighsModelStatus.kUnboundedOrInfeasible:
+                    status = _status_without_presolve(h)
+                if status == HighsModelStatus.kTimeLimit:
+                    raise SolverError(h.modelStatusToString(status))
+                if status != HighsModelStatus.kOptimal:
+                    raise SolverError(h.modelStatusToString(status))
+            finally:
+                h.deleteRows(len(temp_rows), temp_rows)
+
+            # Fix the integer assignment and use the checked blended LP for duals
+            h.fix_integer_columns(h.column_values())
+            try:
+                plan_cost = self._solve(all_col_indices, objectives)
+                if abs(plan_cost - mip_optimum) > _FIXED_LP_TOLERANCE * max(1.0, abs(mip_optimum)):
+                    msg = (
+                        f"Fixed-integer LP primary ({plan_cost}) differs from MIP optimum ({mip_optimum}) "
+                        "beyond tolerance"
+                    )
+                    raise RuntimeError(msg)
+                # Read the fixed-LP solution before restoring integrality so cached outputs stay valid
+                h.column_values()
+                h.row_values()
+                h.row_duals()
+                return plan_cost
+            finally:
+                h.restore_integrality()
+        finally:
+            h.setOptionValue("solver", previous_solver)
+            h.setOptionValue("mip_rel_gap", previous_mip_rel_gap)
 
     def _solve_blended(
         self,

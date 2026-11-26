@@ -4,13 +4,14 @@ import itertools
 import logging
 from unittest.mock import Mock, patch
 
-from highspy import HighsBasisStatus, HighsIis, HighsModelStatus, HighsStatus
+from highspy import Highs, HighsBasisStatus, HighsIis, HighsModelStatus, HighsStatus, HighsVarType
 import numpy as np
 import pytest
 
 from custom_components.haeo.core.model import Network, SolverError
 from custom_components.haeo.core.model import infeasibility as infeasibility_module
 from custom_components.haeo.core.model import network as network_module
+from custom_components.haeo.core.model.const import OutputType
 from custom_components.haeo.core.model.element import Element
 from custom_components.haeo.core.model.elements import MODEL_ELEMENT_TYPE_BATTERY as ELEMENT_TYPE_BATTERY
 from custom_components.haeo.core.model.elements import MODEL_ELEMENT_TYPE_CONNECTION as ELEMENT_TYPE_CONNECTION
@@ -22,10 +23,10 @@ from custom_components.haeo.core.model.elements.policy_pricing import PolicyPric
 from custom_components.haeo.core.model.elements.segments import PowerLimitSegment
 from custom_components.haeo.core.model.elements.segments.pricing import PricingSegment
 from custom_components.haeo.core.model.infeasibility import InfeasibleError, RelaxedRows, RowLabel
-from custom_components.haeo.core.model.linear import LinearArray
+from custom_components.haeo.core.model.linear import LinearArray, Rows
 from custom_components.haeo.core.model.network import BlendWeightSearch, SolveOptions, _bisect_boundary
 from custom_components.haeo.core.model.output_data import OutputData
-from custom_components.haeo.core.model.reactive import cost
+from custom_components.haeo.core.model.reactive import TrackedParam, constraint, cost, output
 from custom_components.haeo.core.model.solver import Solver
 from custom_components.haeo.core.model.util.solver_rows import add_rows
 
@@ -1243,3 +1244,307 @@ def test_checking_a_plan_leaves_it_and_its_basis_unchanged() -> None:
     assert h.getInfo().simplex_iteration_count == 0
     np.testing.assert_array_equal(np.asarray(h.getSolution().col_value), plan)
     assert [status == HighsBasisStatus.kBasic for status in [*after.col_status, *after.row_status]] == basic
+
+
+# -----------------------------------------------------------------------------
+# Mixed-integer network tests
+# -----------------------------------------------------------------------------
+
+
+class _BinaryChoice(Element[str]):
+    """A controllable load whose binary choice creates a non-trivial MIP."""
+
+    b_cost = TrackedParam[float]()
+    x_limit = TrackedParam[float]()
+    demand = TrackedParam[float]()
+
+    def __init__(self, name: str, periods: np.ndarray, *, solver: Solver) -> None:
+        super().__init__(name, periods, solver=solver, output_names=frozenset({"b", "x", "capacity"}))
+        self.b = solver.add_binary_variables(1, name=f"{name}.b")[0]
+        self.x = solver.add_variables(1, name=f"{name}.x", lower=0.0, upper=10.0)[0]
+        self.b_cost = 3.0
+        self.x_limit = 2.0
+        self.demand = 1.5
+
+    @constraint(output=True, unit="$/kWh")
+    def capacity(self) -> Rows:
+        """Limit x by the binary state."""
+        return self.x <= self.x_limit * self.b
+
+    @constraint
+    def demand_constraint(self) -> Rows:
+        """Force b to be positive unless disabled by a zero demand."""
+        return self.x + self.b >= self.demand
+
+    @cost
+    def primary(self) -> LinearArray:
+        """Benefit from x, cost for enabling."""
+        return -self.x + self.b_cost * self.b
+
+    def secondary_cost(self) -> LinearArray | None:
+        """Prefer enabling the binary when the primary is tied."""
+        return -self.b
+
+    @output(name="b")
+    def b_output(self) -> OutputData:
+        return OutputData(type=OutputType.POWER, unit="", values=self.extract_values(self.b))
+
+    @output(name="x")
+    def x_output(self) -> OutputData:
+        return OutputData(type=OutputType.POWER, unit="kW", values=self.extract_values(self.x))
+
+
+def _build_binary_network(
+    *, b_cost: float = 3.0, x_limit: float = 2.0, demand: float = 1.5
+) -> tuple[Network, _BinaryChoice]:
+    """Return a network with a single binary-choice element."""
+    network = Network(name="mip_test", periods=np.array([1.0]))
+    element = _BinaryChoice("choice", network.periods, solver=network._solver)
+    network.elements["choice"] = element
+    element.b_cost = b_cost
+    element.x_limit = x_limit
+    element.demand = demand
+    return network, element
+
+
+def _mip_lexicographic_reference(b_cost: float, x_limit: float, demand: float) -> tuple[float, float, float]:
+    """Solve the same two-stage MIP independently with raw HiGHS.
+
+    Returns the primary cost, b value, and x value of the lexicographic optimum.
+    """
+    solver = Highs()
+    solver.setOptionValue("output_flag", False)
+    solver.setOptionValue("solver", "choose")
+    solver.setOptionValue("mip_rel_gap", 0.0)
+    solver.addCols(
+        2,
+        np.zeros(2),
+        np.array([0.0, 0.0]),
+        np.array([1.0, 10.0]),
+        0,
+        np.zeros(0, dtype=np.int32),
+        np.zeros(0, dtype=np.int32),
+        np.zeros(0),
+    )
+    solver.changeColsIntegrality(
+        1, np.array([0], dtype=np.int32), np.array([HighsVarType.kInteger.value], dtype=np.uint8)
+    )
+    solver.addRows(
+        1,
+        np.array([-np.inf]),
+        np.array([0.0]),
+        2,
+        np.array([0, 2], dtype=np.int32),
+        np.array([1, 0], dtype=np.int32),
+        np.array([1.0, -x_limit]),
+    )
+    solver.addRows(
+        1,
+        np.array([demand]),
+        np.array([np.inf]),
+        2,
+        np.array([0, 2], dtype=np.int32),
+        np.array([1, 0], dtype=np.int32),
+        np.array([1.0, 1.0]),
+    )
+    solver.changeColsCost(2, np.arange(2, dtype=np.int32), np.array([b_cost, -1.0]))
+    solver.run()
+    assert solver.getModelStatus() == HighsModelStatus.kOptimal
+    primary_opt = solver.getObjectiveValue()
+    # Bound primary and optimize secondary (-b)
+    solver.addRows(
+        1,
+        np.array([-np.inf]),
+        np.array([primary_opt + 1e-9 * max(1.0, abs(primary_opt))]),
+        2,
+        np.array([0, 2], dtype=np.int32),
+        np.array([0, 1], dtype=np.int32),
+        np.array([b_cost, -1.0]),
+    )
+    solver.changeColsCost(2, np.arange(2, dtype=np.int32), np.array([-1.0, 0.0]))
+    solver.run()
+    assert solver.getModelStatus() == HighsModelStatus.kOptimal
+    solution = solver.getSolution().col_value
+    return primary_opt, solution[0], solution[1]
+
+
+def test_mip_lexicographic_matches_independent_reference() -> None:
+    """The network's MIP path matches a raw HiGHS lexicographic reference."""
+    network, element = _build_binary_network()
+    primary = network.optimize()
+    outputs = element.outputs()
+
+    reference_cost, reference_b, reference_x = _mip_lexicographic_reference(3.0, 2.0, 1.5)
+    assert primary == pytest.approx(reference_cost)
+    assert outputs["b"].values == pytest.approx((reference_b,))
+    assert outputs["x"].values == pytest.approx((reference_x,))
+    assert outputs["b"].values[0] in (0.0, 1.0)
+
+
+def test_mip_rejects_fractional_lp_solution() -> None:
+    """The integer optimum is worse than the LP relaxation, so fractional binaries are rejected."""
+    network, element = _build_binary_network()
+    network.optimize()
+    b_col = int(element.b.cols[0, 0])
+
+    # Continuous relaxation of the same model
+    relaxation = Highs()
+    relaxation.setOptionValue("output_flag", False)
+    relaxation.addCols(
+        2,
+        np.zeros(2),
+        np.array([0.0, 0.0]),
+        np.array([1.0, 10.0]),
+        0,
+        np.zeros(0, dtype=np.int32),
+        np.zeros(0, dtype=np.int32),
+        np.zeros(0),
+    )
+    relaxation.addRows(
+        1,
+        np.array([-np.inf]),
+        np.array([0.0]),
+        2,
+        np.array([0, 2], dtype=np.int32),
+        np.array([1, 0], dtype=np.int32),
+        np.array([1.0, -2.0]),
+    )
+    relaxation.addRows(
+        1,
+        np.array([1.5]),
+        np.array([np.inf]),
+        2,
+        np.array([0, 2], dtype=np.int32),
+        np.array([1, 0], dtype=np.int32),
+        np.array([1.0, 1.0]),
+    )
+    relaxation.changeColsCost(2, np.arange(2, dtype=np.int32), np.array([3.0, -1.0]))
+    relaxation.run()
+    assert relaxation.getModelStatus() == HighsModelStatus.kOptimal
+    relaxed = np.asarray(relaxation.getSolution().col_value)
+
+    assert 0.0 < relaxed[b_col] < 1.0
+    assert element.outputs()["b"].values[0] in (0.0, 1.0)
+    assert relaxation.getObjectiveValue() < network.optimize() - 0.2
+
+
+def test_reactive_resolve_refreshes_integer_assignment_and_outputs() -> None:
+    """Changing a parameter makes the binary switch, and the next solve is a fresh MIP."""
+    network, element = _build_binary_network()
+    network.optimize()
+    assert element.outputs()["b"].values == pytest.approx((1.0,))
+    assert network._solver.getColIntegrality(int(element.b.cols[0, 0]))[1] == HighsVarType.kInteger
+
+    # Remove the demand and make enabling the binary so expensive that b=0 is better
+    element.demand = 0.0
+    element.b_cost = 5.0
+    network.optimize()
+
+    assert element.outputs()["b"].values == pytest.approx((0.0,))
+    assert element.outputs()["x"].values == pytest.approx((0.0,))
+    assert network._solver.getColIntegrality(int(element.b.cols[0, 0]))[1] == HighsVarType.kInteger
+
+
+def test_fixed_lp_duals_match_independent_fixed_binary_lp() -> None:
+    """After fixing the binary assignment, the LP duals match a hand-built fixed-binary LP."""
+    network, element = _build_binary_network()
+    network.optimize()
+    b_value = element.outputs()["b"].values[0]
+    x_limit = element.x_limit
+    b_cost = element.b_cost
+
+    # Independent fixed-binary LP: same variables and rows with b fixed to the MIP value
+    reference = Highs()
+    reference.setOptionValue("output_flag", False)
+    reference.setOptionValue("solver", "simplex")
+    reference.addCols(
+        2,
+        np.zeros(2),
+        np.array([b_value, 0.0]),
+        np.array([b_value, 10.0]),
+        0,
+        np.zeros(0, dtype=np.int32),
+        np.zeros(0, dtype=np.int32),
+        np.zeros(0),
+    )
+    reference.addRows(
+        1,
+        np.array([-np.inf]),
+        np.array([0.0]),
+        2,
+        np.array([0, 2], dtype=np.int32),
+        np.array([1, 0], dtype=np.int32),
+        np.array([1.0, -x_limit]),
+    )
+    reference.addRows(
+        1,
+        np.array([1.5]),
+        np.array([np.inf]),
+        2,
+        np.array([0, 2], dtype=np.int32),
+        np.array([1, 0], dtype=np.int32),
+        np.array([1.0, 1.0]),
+    )
+    reference.changeColsCost(2, np.arange(2, dtype=np.int32), np.array([b_cost, -1.0]))
+    reference.run()
+    assert reference.getModelStatus() == HighsModelStatus.kOptimal
+    reference_dual = reference.getSolution().row_dual[0]
+
+    assert element.outputs()["capacity"].values[0] == pytest.approx(reference_dual)
+
+
+def test_infeasible_mip_never_publishes_relaxed_fractional_solution() -> None:
+    """A relaxed infeasible MIP still returns an integer binary assignment."""
+    network = Network(name="test", periods=np.array([1.0, 1.0, 1.0]), relax_infeasible=True)
+    network.add({"element_type": ELEMENT_TYPE_NODE, "name": "grid", "is_source": True, "is_sink": False})
+    network.add({"element_type": ELEMENT_TYPE_NODE, "name": "switchboard", "is_source": False, "is_sink": False})
+    network.add({"element_type": ELEMENT_TYPE_NODE, "name": "load", "is_source": False, "is_sink": True})
+    network.add({"element_type": ELEMENT_TYPE_BATTERY, "name": "battery", "capacity": 10.0, "initial_charge": 10.0})
+    configs: list[ConnectionElementConfig] = [
+        {
+            "element_type": ELEMENT_TYPE_CONNECTION,
+            "name": "grid:import",
+            "source": "grid",
+            "target": "switchboard",
+            "tags": {1},
+            "segments": {
+                "power_limit": {"segment_type": "power_limit", "max_power": 10.0},
+                "pricing": {"segment_type": "pricing", "price": 0.30},
+            },
+        },
+        {
+            "element_type": ELEMENT_TYPE_CONNECTION,
+            "name": "battery:discharge",
+            "source": "battery",
+            "target": "switchboard",
+            "tags": {1},
+            "segments": {"power_limit": {"segment_type": "power_limit", "max_power": 5.0}},
+        },
+        {
+            "element_type": ELEMENT_TYPE_CONNECTION,
+            "name": "load:connection",
+            "source": "switchboard",
+            "target": "load",
+            "tags": {1},
+            "segments": {
+                "power_limit": {
+                    "segment_type": "power_limit",
+                    "max_power": np.array([3.0, 15.5, 3.0]),
+                    "fixed": True,
+                }
+            },
+        },
+    ]
+    for config in configs:
+        network.add(config)
+
+    dummy = _BinaryChoice("dummy", network.periods, solver=network._solver)
+    dummy.b_cost = 1.0
+    dummy.x_limit = 0.0
+    network.elements["dummy"] = dummy
+
+    network.optimize()
+
+    b_value = dummy.outputs()["b"].values[0]
+    assert b_value in (0.0, 1.0)
+    assert network._solver.getColIntegrality(int(dummy.b.cols[0, 0]))[1] == HighsVarType.kInteger
